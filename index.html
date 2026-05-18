@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shark Game</title>
+  <style>
+    body {margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#111; color:#fff; font-family:sans-serif;}
+    #gameCanvas {background:#222; border:2px solid #555;}
+    #ui {position:absolute; bottom:20px; width:100%; display:flex; justify-content:space-between; padding:0 20px; pointer-events:none;}
+    .bin {background:#444; padding:10px 20px; border-radius:5px; cursor:pointer; pointer-events:auto;}
+    #score {position:absolute; top:10px; left:10px; font-size:1.2rem;}
+    #lives {position:absolute; top:10px; right:10px; font-size:1.2rem;}
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="400" height="600"></canvas>
+  <div id="score">Score: 0</div>
+  <div id="lives">Lives: 3</div>
+  <div id="ui">
+    <button class="bin" id="sharkBin">Shark Bin</button>
+    <button class="bin" id="planeBin">Plane Bin</button>
+  </div>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
