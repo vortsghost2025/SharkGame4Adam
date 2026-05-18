@@ -1,5 +1,10 @@
 # Shark vs. Plane – Quick‑Flick Arcade Game
 
+## Play online
+
+You can play the game directly at [https://sharkgame4adam.itch.io](https://sharkgame4adam.itch.io).
+
+
 **A tiny, pure‑JavaScript arcade prototype** where walls with shark or plane silhouettes rush toward the player.  The player must quickly flick the matching object (shark or plane) from the bottom corners into the moving cut‑out.  Simple graphics, no external assets, and a complete test suite.
 
 ## How to play
