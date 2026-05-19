@@ -2,82 +2,65 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Shark vs Plane</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a0f;overflow:hidden;display:flex;justify-content:center;align-items:center;height:100vh;height:100dvh;font-family:'Courier New',monospace;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none}
-#gameCanvas{display:block;image-rendering:pixelated}
-#overlay{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10;pointer-events:none}
-#overlay.active{pointer-events:auto}
-#title{font-size:clamp(28px,7vw,56px);font-weight:900;letter-spacing:4px;text-transform:uppercase;text-shadow:0 0 20px #0af,0 0 40px #0af;margin-bottom:8px}
-#subtitle{font-size:clamp(12px,3vw,18px);opacity:.6;margin-bottom:30px;letter-spacing:2px}
-#startBtn,#restartBtn{font-family:'Courier New',monospace;font-size:clamp(14px,3.5vw,20px);padding:12px 32px;background:transparent;border:2px solid #0af;color:#0af;cursor:pointer;letter-spacing:3px;text-transform:uppercase;transition:all .2s}
-#startBtn:hover,#restartBtn:hover{background:#0af;color:#000}
-#gameOver{font-size:clamp(24px,6vw,42px);font-weight:900;margin-bottom:6px;color:#f44}
-#finalScore{font-size:clamp(14px,3.5vw,20px);margin-bottom:24px;opacity:.7}
-#hud{position:fixed;top:0;left:0;width:100%;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:5;pointer-events:none;font-size:clamp(13px,3vw,16px);font-weight:700}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:'Courier New',monospace;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center}
+canvas{display:block;width:100%;height:100%;position:fixed;top:0;left:0;z-index:1}
+#overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(10,10,15,.92);transition:opacity .3s}
+#overlay.hidden{opacity:0;pointer-events:none}
+#title{font-size:clamp(28px,8vw,56px);font-weight:900;letter-spacing:4px;text-transform:uppercase;text-shadow:0 0 20px #0af,0 0 40px #0af;margin-bottom:8px;text-align:center}
+#subtitle{font-size:clamp(11px,2.8vw,16px);opacity:.55;margin-bottom:clamp(20px,5vh,40px);letter-spacing:2px;text-align:center;padding:0 16px}
+.btn{font-family:'Courier New',monospace;font-size:clamp(14px,3.5vw,20px);padding:12px 32px;background:transparent;border:2px solid #0af;color:#0af;cursor:pointer;letter-spacing:3px;text-transform:uppercase;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.btn:active{background:#0af;color:#000}
+#goTitle{font-size:clamp(24px,7vw,48px);font-weight:900;margin-bottom:6px;color:#f44;display:none}
+#goScore{font-size:clamp(13px,3.5vw,18px);margin-bottom:clamp(16px,4vh,28px);opacity:.65;display:none}
+#hud{position:fixed;top:0;left:0;width:100%;padding:clamp(8px,2vw,14px) clamp(12px,3vw,18px);display:flex;justify-content:space-between;z-index:10;pointer-events:none;font-size:clamp(12px,3vw,16px);font-weight:700;letter-spacing:1px}
 #scoreVal{color:#0f0}
 #livesVal{color:#f44}
-#zone{position:fixed;bottom:0;left:0;width:100%;height:30%;z-index:5}
-.zone-half{width:50%;height:100%;float:left;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:clamp(12px,3vh,24px);cursor:pointer;transition:background .1s}
-.zone-half:active{background:rgba(255,255,255,.05)}
-.zone-label{font-size:clamp(10px,2.5vw,14px);opacity:.4;letter-spacing:2px;text-transform:uppercase}
-.zone-icon{font-size:clamp(32px,8vw,56px);margin-bottom:4px;filter:drop-shadow(0 0 8px rgba(0,170,255,.4))}
-#hint{position:fixed;bottom:clamp(2px,1vh,8px);width:100%;text-align:center;font-size:clamp(9px,2vw,11px);opacity:.25;letter-spacing:1px;z-index:6;pointer-events:none}
+#controls{position:fixed;bottom:0;left:0;width:100%;z-index:10;display:none}
+#controls-row{display:flex;width:100%}
+.ctrl{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:clamp(10px,2.5vh,20px);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .08s;min-height:clamp(60px,14vh,100px)}
+.ctrl:active{background:rgba(0,170,255,.08)}
+.ctrl-icon{font-size:clamp(28px,7vw,48px);filter:drop-shadow(0 0 6px rgba(0,170,255,.35))}
+.ctrl-label{font-size:clamp(9px,2.2vw,12px);opacity:.35;letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+#hint{position:fixed;bottom:clamp(2px,.5vh,6px);width:100%;text-align:center;font-size:clamp(8px,1.8vw,10px);opacity:.2;letter-spacing:1px;z-index:10;pointer-events:none}
 </style>
 </head>
 <body>
-<canvas id="gameCanvas"></canvas>
-<div id="overlay" class="active">
+<canvas id="c"></canvas>
+<div id="overlay">
   <div id="title">Shark vs Plane</div>
   <div id="subtitle">Flick the right one through the hole</div>
-  <button id="startBtn">Start</button>
-  <div id="gameOver" style="display:none">Game Over</div>
-  <div id="finalScore" style="display:none"></div>
-  <button id="restartBtn" style="display:none">Again</button>
+  <button class="btn" id="startBtn">Start</button>
+  <div id="goTitle">Game Over</div>
+  <div id="goScore"></div>
+  <button class="btn" id="restartBtn" style="display:none">Again</button>
 </div>
 <div id="hud" style="display:none">
   <div id="scoreVal">SCORE: 0</div>
   <div id="livesVal">LIVES: 3</div>
 </div>
-<div id="zone" style="display:none">
-  <div class="zone-half" id="sharkZone">
-    <div class="zone-icon">&#x1F988;</div>
-    <div class="zone-label">Shark</div>
-  </div>
-  <div class="zone-half" id="planeZone">
-    <div class="zone-icon">&#x2708;</div>
-    <div class="zone-label">Plane</div>
+<div id="controls">
+  <div id="controls-row">
+    <div class="ctrl" id="sharkCtrl"><div class="ctrl-icon">&#x1F988;</div><div class="ctrl-label">Shark</div></div>
+    <div class="ctrl" id="planeCtrl"><div class="ctrl-icon">&#x2708;</div><div class="ctrl-label">Plane</div></div>
   </div>
 </div>
-<div id="hint" style="display:none">TAP LEFT / RIGHT or SWIPE</div>
+<div id="hint" style="display:none">TAP LEFT / RIGHT &bull; SWIPE &bull; ARROW KEYS</div>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
+const $ = id => document.getElementById(id);
+const canvas = $('c');
 const ctx = canvas.getContext('2d');
-const overlay = document.getElementById('overlay');
-const startBtn = document.getElementById('startBtn');
-const restartBtn = document.getElementById('restartBtn');
-const titleEl = document.getElementById('title');
-const subtitleEl = document.getElementById('subtitle');
-const gameOverEl = document.getElementById('gameOver');
-const finalScoreEl = document.getElementById('finalScore');
-const hud = document.getElementById('hud');
-const scoreVal = document.getElementById('scoreVal');
-const livesVal = document.getElementById('livesVal');
-const zone = document.getElementById('zone');
-const sharkZone = document.getElementById('sharkZone');
-const planeZone = document.getElementById('planeZone');
-const hint = document.getElementById('hint');
 
 let W, H, dpr;
 function resize() {
-  dpr = window.devicePixelRatio || 1;
-  W = Math.min(window.innerWidth, 480);
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
   H = window.innerHeight;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
   canvas.width = W * dpr;
   canvas.height = H * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -85,262 +68,208 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-const STATE = { score: 0, lives: 3, wall: null, projectiles: [], effects: [], running: false };
-const WALL_H = 28;
-const PROJ_SPEED = 480;
-const BASE_WALL_SPEED = 70;
+const G = {
+  score: 0, lives: 3, wall: null, projs: [], fx: [],
+  running: false, wallCooldown: 0, pendingWall: false, paused: false
+};
+const WALL_H = 30;
+const PROJ_SPEED = 500;
+const BASE_WALL_SPEED = 65;
+const WALL_GAP = 0.8;
 
-function randomType() { return Math.random() < 0.5 ? 'shark' : 'plane'; }
+function rng() { return Math.random() < 0.5 ? 'shark' : 'plane'; }
 
 function spawnWall() {
-  const type = randomType();
-  const cutW = 70;
-  STATE.wall = { y: -WALL_H, type, cutX: (W - cutW) / 2, cutW, h: WALL_H };
+  const type = rng();
+  const cutW = Math.min(80, W * 0.22);
+  G.wall = { y: -WALL_H, type, cutX: (W - cutW) / 2, cutW, h: WALL_H };
+  G.pendingWall = false;
 }
 
-function fireProjectile(type) {
-  if (!STATE.running || !STATE.wall) return;
+function fire(type) {
+  if (!G.running || !G.wall || G.grace > 0) return;
   const x = type === 'shark' ? W * 0.25 : W * 0.75;
-  STATE.projectiles.push({ x, y: H - 60, type, vy: -PROJ_SPEED, r: 14 });
+  G.projs.push({ x, y: H * 0.82, type, vy: -PROJ_SPEED, r: 14 });
 }
 
-function addEffect(x, y, type) {
-  const particles = [];
-  const count = type === 'splat' ? 12 : 18;
-  for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 60 + Math.random() * 160;
-    particles.push({
-      x, y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - (type === 'splat' ? 40 : 80),
-      life: 0.4 + Math.random() * 0.4,
-      maxLife: 0.4 + Math.random() * 0.4,
-      size: type === 'splat' ? 3 + Math.random() * 4 : 2 + Math.random() * 6,
-      color: type === 'splat' ? `hsl(${190 + Math.random()*20},90%,${50+Math.random()*30}%)` : `hsl(${20+Math.random()*30},100%,${50+Math.random()*30}%)`
+function boom(x, y, kind) {
+  const ps = [];
+  const n = kind === 'splat' ? 14 : kind === 'boom' ? 20 : 8;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 50 + Math.random() * 180;
+    const hue = kind === 'splat' ? 190 + Math.random() * 25
+              : kind === 'boom' ? 15 + Math.random() * 30
+              : 120 + Math.random() * 30;
+    ps.push({
+      x, y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - (kind==='boom'?60:30),
+      life: .35+Math.random()*.45, max: .35+Math.random()*.45,
+      sz: kind==='pass' ? 2+Math.random()*3 : 3+Math.random()*5,
+      col: `hsl(${hue},90%,${45+Math.random()*35}%)`
     });
   }
-  STATE.effects.push({ x, y, type, particles, age: 0, flash: 1.0 });
+  G.fx.push({ x, y, kind, ps, age: 0, flash: 1 });
 }
 
-function handleCollision(proj) {
-  if (!STATE.wall) return;
-  const correct = proj.type === STATE.wall.type;
-  const cx = STATE.wall.cutX + STATE.wall.cutW / 2;
-  const cy = STATE.wall.y + STATE.wall.h / 2;
-  if (correct) {
-    STATE.score += 1;
-    addEffect(cx, cy, 'pass');
-  } else {
-    STATE.lives -= 1;
-    addEffect(cx, cy, proj.type === 'shark' ? 'splat' : 'boom');
-  }
-  STATE.wall = null;
-  STATE.projectiles = [];
+function collide(p) {
+  if (!G.wall) return;
+  const ok = p.type === G.wall.type;
+  const cx = G.wall.cutX + G.wall.cutW / 2;
+  const cy = G.wall.y + G.wall.h / 2;
+  if (ok) { G.score++; boom(cx, cy, 'pass'); }
+  else { G.lives--; boom(cx, cy, p.type==='shark'?'splat':'boom'); }
+  G.wall = null;
+  G.wallCooldown = WALL_GAP;
+  G.projs = [];
 }
 
-function resetGame() {
-  STATE.score = 0;
-  STATE.lives = 3;
-  STATE.wall = null;
-  STATE.projectiles = [];
-  STATE.effects = [];
-  spawnWall();
-}
-
-function drawShark(x, y, s, alpha) {
-  ctx.save();
-  ctx.globalAlpha = alpha || 1;
-  ctx.translate(x, y);
-  const sc = s / 28;
-  ctx.scale(sc, sc);
-  ctx.fillStyle = '#1a8ccc';
-  ctx.beginPath();
-  ctx.moveTo(-14, 0);
-  ctx.quadraticCurveTo(-8, -10, 8, -6);
-  ctx.lineTo(14, 0);
-  ctx.lineTo(8, 4);
-  ctx.quadraticCurveTo(0, 8, -10, 4);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#0d5a8a';
-  ctx.beginPath();
-  ctx.moveTo(-6, -4);
-  ctx.lineTo(-2, -12);
-  ctx.lineTo(2, -4);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.arc(6, -2, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.arc(6.5, -2, 1.2, 0, Math.PI * 2);
-  ctx.fill();
+function drawShark(x, y, s, a) {
+  ctx.save(); ctx.globalAlpha = a||1; ctx.translate(x,y);
+  const k = s/28; ctx.scale(k,k);
+  ctx.fillStyle='#1a8ccc';
+  ctx.beginPath(); ctx.moveTo(-14,0);
+  ctx.quadraticCurveTo(-8,-10,8,-6); ctx.lineTo(14,0);
+  ctx.lineTo(8,4); ctx.quadraticCurveTo(0,8,-10,4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#0d5a8a';
+  ctx.beginPath(); ctx.moveTo(-6,-4); ctx.lineTo(-2,-12); ctx.lineTo(2,-4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#c0e8ff';
+  ctx.beginPath(); ctx.arc(6,-2,2.5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#111';
+  ctx.beginPath(); ctx.arc(6.8,-2,1.1,0,Math.PI*2); ctx.fill();
   ctx.restore();
 }
 
-function drawPlane(x, y, s, alpha) {
-  ctx.save();
-  ctx.globalAlpha = alpha || 1;
-  ctx.translate(x, y);
-  const sc = s / 28;
-  ctx.scale(sc, sc);
-  ctx.fillStyle = '#8a8a8a';
-  ctx.beginPath();
-  ctx.moveTo(-14, 0);
-  ctx.lineTo(-4, -3);
-  ctx.lineTo(14, 0);
-  ctx.lineTo(-4, 3);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#555';
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(-3, -10);
-  ctx.lineTo(3, -10);
-  ctx.lineTo(4, 0);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(-3, 10);
-  ctx.lineTo(3, 10);
-  ctx.lineTo(4, 0);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#f44';
-  ctx.beginPath();
-  ctx.moveTo(14, 0);
-  ctx.lineTo(10, -2);
-  ctx.lineTo(10, 2);
-  ctx.closePath();
-  ctx.fill();
+function drawPlane(x, y, s, a) {
+  ctx.save(); ctx.globalAlpha = a||1; ctx.translate(x,y);
+  const k = s/28; ctx.scale(k,k);
+  ctx.fillStyle='#999';
+  ctx.beginPath(); ctx.moveTo(-14,0); ctx.lineTo(-4,-3); ctx.lineTo(14,0);
+  ctx.lineTo(-4,3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#666';
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-3,-10); ctx.lineTo(3,-10);
+  ctx.lineTo(4,0); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-3,10); ctx.lineTo(3,10);
+  ctx.lineTo(4,0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#f44';
+  ctx.beginPath(); ctx.moveTo(14,0); ctx.lineTo(10,-2); ctx.lineTo(10,2); ctx.closePath(); ctx.fill();
   ctx.restore();
 }
 
-function drawWall(wall) {
-  if (!wall) return;
+function drawIcon(type, x, y, s, a) {
+  (type==='shark'?drawShark:drawPlane)(x,y,s,a);
+}
+
+function drawWall(w) {
+  if (!w) return;
+  const y = w.y, h = w.h;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, y, W, h);
+  ctx.rect(w.cutX+w.cutW, y, -w.cutW, h);
+  ctx.clip('evenodd');
   ctx.fillStyle = '#2a2a3a';
-  ctx.fillRect(0, wall.y, W, wall.h);
-  ctx.clearRect(wall.cutX, wall.y, wall.cutW, wall.h);
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(wall.cutX, wall.y, wall.cutW, wall.h);
-  const iconSize = 18;
-  const icon = wall.type === 'shark' ? drawShark : drawPlane;
-  icon(wall.cutX + wall.cutW / 2, wall.y + wall.h / 2, iconSize, 0.3);
+  ctx.fillRect(0, y, W, h);
+  ctx.restore();
+  ctx.strokeStyle='#3a3a4f'; ctx.lineWidth=1.5;
+  ctx.strokeRect(w.cutX, y, w.cutW, h);
+  drawIcon(w.type, w.cutX+w.cutW/2, y+h/2, 16, .25);
 }
 
-function drawProjectiles() {
-  STATE.projectiles.forEach(p => {
-    const draw = p.type === 'shark' ? drawShark : drawPlane;
-    draw(p.x, p.y, p.r * 2, 1);
-  });
+function drawProjs() {
+  G.projs.forEach(p => drawIcon(p.type, p.x, p.y, p.r*2, 1));
 }
 
-function drawEffects(dt) {
-  STATE.effects.forEach(e => {
+function drawFx(dt) {
+  G.fx.forEach(e => {
     e.age += dt;
-    e.flash = Math.max(0, e.flash - dt * 4);
+    e.flash = Math.max(0, e.flash - dt*5);
     if (e.flash > 0) {
-      ctx.save();
-      ctx.globalAlpha = e.flash * 0.4;
-      ctx.fillStyle = e.type === 'splat' ? '#1a8ccc' : e.type === 'boom' ? '#f80' : '#0f0';
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, 30, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.save(); ctx.globalAlpha = e.flash*.35;
+      ctx.fillStyle = e.kind==='splat'?'#1a8ccc':e.kind==='boom'?'#f80':'#0f0';
+      ctx.beginPath(); ctx.arc(e.x,e.y,35,0,Math.PI*2); ctx.fill();
       ctx.restore();
     }
-    e.particles.forEach(p => {
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vy += 200 * dt;
-      p.life -= dt;
-      if (p.life > 0) {
-        ctx.save();
-        ctx.globalAlpha = (p.life / p.maxLife) * 0.8;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
-        ctx.fill();
+    e.ps.forEach(p => {
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=220*dt; p.life-=dt;
+      if (p.life>0) {
+        ctx.save(); ctx.globalAlpha=(p.life/p.max)*.85;
+        ctx.fillStyle=p.col; ctx.beginPath();
+        ctx.arc(p.x,p.y,p.sz*(p.life/p.max),0,Math.PI*2); ctx.fill();
         ctx.restore();
       }
     });
   });
-  STATE.effects = STATE.effects.filter(e => e.age < 1.2);
+  G.fx = G.fx.filter(e => e.age < 1.4);
 }
 
 function drawBg() {
-  ctx.fillStyle = '#0a0a0f';
-  ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#1a1a2a';
-  ctx.lineWidth = 1;
-  for (let y = 0; y < H; y += 40) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = '#0d0d1a';
-  for (let x = 0; x < W; x += 40) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, H);
-    ctx.stroke();
-  }
+  ctx.fillStyle='#0a0a0f'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#13131f'; ctx.lineWidth=1;
+  const g = 50;
+  for (let y=0;y<H;y+=g){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  for (let x=0;x<W;x+=g){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
 }
 
-let lastTime = 0;
+let lt = 0;
 function loop(ts) {
-  if (!STATE.running) return;
-  const dt = Math.min((ts - lastTime) / 1000, 0.05);
-  lastTime = ts;
+  if (!G.running) return;
+  const dt = Math.min((ts-lt)/1000, .05);
+  lt = ts;
 
   drawBg();
 
-  if (STATE.wall) {
-    const speed = BASE_WALL_SPEED + Math.floor(STATE.score / 5) * 25;
-    STATE.wall.y += speed * dt;
-    if (STATE.wall.y > H) {
-      STATE.lives -= 1;
-      addEffect(W / 2, H - 40, 'boom');
-      STATE.wall = null;
+  if (G.grace > 0) G.grace -= dt;
+
+  if (G.wallCooldown > 0) {
+    G.wallCooldown -= dt;
+    if (G.wallCooldown <= 0 && !G.wall && !G.pendingWall) {
+      G.pendingWall = true;
+      spawnWall();
     }
   }
-  if (!STATE.wall) {
-    setTimeout(() => { if (STATE.running) spawnWall(); }, 300);
+
+  if (G.wall) {
+    const spd = BASE_WALL_SPEED + Math.floor(G.score/5)*22;
+    G.wall.y += spd * dt;
+    if (G.wall.y > H) {
+      G.lives--;
+      boom(W/2, H-50, 'boom');
+      G.wall = null;
+      G.wallCooldown = WALL_GAP;
+    }
   }
 
-  STATE.projectiles.forEach(p => { p.y += p.vy * dt; });
+  G.projs.forEach(p => { p.y += p.vy * dt; });
 
-  if (STATE.wall) {
-    STATE.projectiles.forEach(p => {
-      if (p.y - p.r <= STATE.wall.y + STATE.wall.h && p.y + p.r >= STATE.wall.y) {
-        handleCollision(p);
+  if (G.wall) {
+    for (let i = G.projs.length-1; i >= 0; i--) {
+      const p = G.projs[i];
+      if (p.y-p.r <= G.wall.y+G.wall.h && p.y+p.r >= G.wall.y) {
+        collide(p);
+        break;
       }
-    });
+    }
   }
 
-  STATE.projectiles = STATE.projectiles.filter(p => p.y + p.r > -20);
+  G.projs = G.projs.filter(p => p.y+p.r > -20);
 
-  drawWall(STATE.wall);
-  drawProjectiles();
-  drawEffects(dt);
+  drawWall(G.wall);
+  drawProjs();
+  drawFx(dt);
 
-  scoreVal.textContent = 'SCORE: ' + STATE.score;
-  livesVal.textContent = 'LIVES: ' + STATE.lives;
+  $('scoreVal').textContent = 'SCORE: ' + G.score;
+  $('livesVal').textContent = 'LIVES: ' + G.lives;
 
-  if (STATE.lives <= 0) {
-    STATE.running = false;
-    gameOverEl.style.display = 'block';
-    finalScoreEl.style.display = 'block';
-    finalScoreEl.textContent = 'Final score: ' + STATE.score;
-    restartBtn.style.display = 'inline-block';
-    hud.style.display = 'none';
-    zone.style.display = 'none';
-    hint.style.display = 'none';
+  if (G.lives <= 0) {
+    G.running = false;
+    $('goTitle').style.display = 'block';
+    $('goScore').style.display = 'block';
+    $('goScore').textContent = 'Final score: ' + G.score;
+    $('restartBtn').style.display = 'inline-block';
+    $('hud').style.display = 'none';
+    $('controls').style.display = 'none';
+    $('hint').style.display = 'none';
+    drawBg();
     return;
   }
 
@@ -348,45 +277,64 @@ function loop(ts) {
 }
 
 function startGame() {
-  overlay.classList.remove('active');
-  titleEl.style.display = 'none';
-  subtitleEl.style.display = 'none';
-  startBtn.style.display = 'none';
-  gameOverEl.style.display = 'none';
-  finalScoreEl.style.display = 'none';
-  restartBtn.style.display = 'none';
-  hud.style.display = 'flex';
-  zone.style.display = 'block';
-  hint.style.display = 'block';
-  resetGame();
-  STATE.running = true;
-  lastTime = performance.now();
+  $('overlay').classList.add('hidden');
+  $('goTitle').style.display = 'none';
+  $('goScore').style.display = 'none';
+  $('restartBtn').style.display = 'none';
+  $('hud').style.display = 'flex';
+  $('controls').style.display = 'block';
+  $('hint').style.display = 'block';
+  G.score = 0; G.lives = 3; G.wall = null; G.projs = []; G.fx = [];
+  G.wallCooldown = 0.5; G.pendingWall = false; G.grace = 0.3;
+  G.running = true;
+  lt = performance.now();
   requestAnimationFrame(loop);
 }
 
-startBtn.addEventListener('click', startGame);
-restartBtn.addEventListener('click', startGame);
+$('startBtn').addEventListener('click', startGame);
+$('restartBtn').addEventListener('click', startGame);
 
-sharkZone.addEventListener('click', () => fireProjectile('shark'));
-planeZone.addEventListener('click', () => fireProjectile('plane'));
-sharkZone.addEventListener('touchstart', (e) => { e.preventDefault(); fireProjectile('shark'); }, { passive: false });
-planeZone.addEventListener('touchstart', (e) => { e.preventDefault(); fireProjectile('plane'); }, { passive: false });
+$('sharkCtrl').addEventListener('pointerdown', e => { e.preventDefault(); fire('shark'); });
+$('planeCtrl').addEventListener('pointerdown', e => { e.preventDefault(); fire('plane'); });
 
-let touchStartX = 0;
-document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
-document.addEventListener('touchend', (e) => {
-  if (!STATE.running) return;
-  const dx = e.changedTouches[0].clientX - touchStartX;
-  if (Math.abs(dx) > 30) {
-    fireProjectile(dx < 0 ? 'shark' : 'plane');
-  }
-}, { passive: true });
-
-document.addEventListener('keydown', (e) => {
-  if (!STATE.running) return;
-  if (e.key === 'ArrowLeft' || e.key === 'a') fireProjectile('shark');
-  if (e.key === 'ArrowRight' || e.key === 'd') fireProjectile('plane');
+let swipeX = 0, swipeY = 0, swiping = false;
+document.addEventListener('pointerdown', e => {
+  if (e.target.closest('.ctrl') || e.target.closest('.btn')) return;
+  swipeX = e.clientX; swipeY = e.clientY; swiping = true;
 });
+document.addEventListener('pointerup', e => {
+  if (!swiping || !G.running) { swiping = false; return; }
+  swiping = false;
+  const dx = e.clientX - swipeX;
+  const dy = e.clientY - swipeY;
+  if (Math.abs(dx) > 25 && Math.abs(dx) > Math.abs(dy)*0.6) {
+    fire(dx < 0 ? 'shark' : 'plane');
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (!G.running) return;
+  if (e.key==='ArrowLeft'||e.key==='a') fire('shark');
+  if (e.key==='ArrowRight'||e.key==='d') fire('plane');
+});
+
+window.addEventListener('blur', () => { G.paused = G.running; G.running = false; });
+window.addEventListener('focus', () => { if (G.paused && G.lives > 0) { G.running = true; G.paused = false; lt=performance.now(); requestAnimationFrame(loop); }});
+
+(function drawPause() {
+  if (G.paused) {
+    ctx.fillStyle='#0a0a0f'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#13131f'; ctx.lineWidth=1;
+    for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    if(G.wall) drawWall(G.wall);
+    drawProjs();
+    ctx.fillStyle='rgba(0,0,0,.45)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fff'; ctx.font='bold '+Math.max(16,W*0.06)+'px "Courier New",monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('PAUSED',W/2,H/2);
+  }
+  requestAnimationFrame(drawPause);
+})();
 </script>
 </body>
 </html>
