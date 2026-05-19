@@ -1,26 +1,392 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shark Game</title>
-  <style>
-    body {margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#111; color:#fff; font-family:sans-serif;}
-    #gameCanvas {background:#222; border:2px solid #555;}
-    #ui {position:absolute; bottom:20px; width:100%; display:flex; justify-content:space-between; padding:0 20px; pointer-events:none;}
-    .bin {background:#444; padding:10px 20px; border-radius:5px; cursor:pointer; pointer-events:auto;}
-    #score {position:absolute; top:10px; left:10px; font-size:1.2rem;}
-    #lives {position:absolute; top:10px; right:10px; font-size:1.2rem;}
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Shark vs Plane</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;overflow:hidden;display:flex;justify-content:center;align-items:center;height:100vh;height:100dvh;font-family:'Courier New',monospace;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none}
+#gameCanvas{display:block;image-rendering:pixelated}
+#overlay{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10;pointer-events:none}
+#overlay.active{pointer-events:auto}
+#title{font-size:clamp(28px,7vw,56px);font-weight:900;letter-spacing:4px;text-transform:uppercase;text-shadow:0 0 20px #0af,0 0 40px #0af;margin-bottom:8px}
+#subtitle{font-size:clamp(12px,3vw,18px);opacity:.6;margin-bottom:30px;letter-spacing:2px}
+#startBtn,#restartBtn{font-family:'Courier New',monospace;font-size:clamp(14px,3.5vw,20px);padding:12px 32px;background:transparent;border:2px solid #0af;color:#0af;cursor:pointer;letter-spacing:3px;text-transform:uppercase;transition:all .2s}
+#startBtn:hover,#restartBtn:hover{background:#0af;color:#000}
+#gameOver{font-size:clamp(24px,6vw,42px);font-weight:900;margin-bottom:6px;color:#f44}
+#finalScore{font-size:clamp(14px,3.5vw,20px);margin-bottom:24px;opacity:.7}
+#hud{position:fixed;top:0;left:0;width:100%;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:5;pointer-events:none;font-size:clamp(13px,3vw,16px);font-weight:700}
+#scoreVal{color:#0f0}
+#livesVal{color:#f44}
+#zone{position:fixed;bottom:0;left:0;width:100%;height:30%;z-index:5}
+.zone-half{width:50%;height:100%;float:left;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:clamp(12px,3vh,24px);cursor:pointer;transition:background .1s}
+.zone-half:active{background:rgba(255,255,255,.05)}
+.zone-label{font-size:clamp(10px,2.5vw,14px);opacity:.4;letter-spacing:2px;text-transform:uppercase}
+.zone-icon{font-size:clamp(32px,8vw,56px);margin-bottom:4px;filter:drop-shadow(0 0 8px rgba(0,170,255,.4))}
+#hint{position:fixed;bottom:clamp(2px,1vh,8px);width:100%;text-align:center;font-size:clamp(9px,2vw,11px);opacity:.25;letter-spacing:1px;z-index:6;pointer-events:none}
+</style>
 </head>
 <body>
-  <canvas id="gameCanvas" width="400" height="600"></canvas>
-  <div id="score">Score: 0</div>
-  <div id="lives">Lives: 3</div>
-  <div id="ui">
-    <button class="bin" id="sharkBin">Shark Bin</button>
-    <button class="bin" id="planeBin">Plane Bin</button>
+<canvas id="gameCanvas"></canvas>
+<div id="overlay" class="active">
+  <div id="title">Shark vs Plane</div>
+  <div id="subtitle">Flick the right one through the hole</div>
+  <button id="startBtn">Start</button>
+  <div id="gameOver" style="display:none">Game Over</div>
+  <div id="finalScore" style="display:none"></div>
+  <button id="restartBtn" style="display:none">Again</button>
+</div>
+<div id="hud" style="display:none">
+  <div id="scoreVal">SCORE: 0</div>
+  <div id="livesVal">LIVES: 3</div>
+</div>
+<div id="zone" style="display:none">
+  <div class="zone-half" id="sharkZone">
+    <div class="zone-icon">&#x1F988;</div>
+    <div class="zone-label">Shark</div>
   </div>
-  <script type="module" src="game.js"></script>
+  <div class="zone-half" id="planeZone">
+    <div class="zone-icon">&#x2708;</div>
+    <div class="zone-label">Plane</div>
+  </div>
+</div>
+<div id="hint" style="display:none">TAP LEFT / RIGHT or SWIPE</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+const titleEl = document.getElementById('title');
+const subtitleEl = document.getElementById('subtitle');
+const gameOverEl = document.getElementById('gameOver');
+const finalScoreEl = document.getElementById('finalScore');
+const hud = document.getElementById('hud');
+const scoreVal = document.getElementById('scoreVal');
+const livesVal = document.getElementById('livesVal');
+const zone = document.getElementById('zone');
+const sharkZone = document.getElementById('sharkZone');
+const planeZone = document.getElementById('planeZone');
+const hint = document.getElementById('hint');
+
+let W, H, dpr;
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = Math.min(window.innerWidth, 480);
+  H = window.innerHeight;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize);
+
+const STATE = { score: 0, lives: 3, wall: null, projectiles: [], effects: [], running: false };
+const WALL_H = 28;
+const PROJ_SPEED = 480;
+const BASE_WALL_SPEED = 70;
+
+function randomType() { return Math.random() < 0.5 ? 'shark' : 'plane'; }
+
+function spawnWall() {
+  const type = randomType();
+  const cutW = 70;
+  STATE.wall = { y: -WALL_H, type, cutX: (W - cutW) / 2, cutW, h: WALL_H };
+}
+
+function fireProjectile(type) {
+  if (!STATE.running || !STATE.wall) return;
+  const x = type === 'shark' ? W * 0.25 : W * 0.75;
+  STATE.projectiles.push({ x, y: H - 60, type, vy: -PROJ_SPEED, r: 14 });
+}
+
+function addEffect(x, y, type) {
+  const particles = [];
+  const count = type === 'splat' ? 12 : 18;
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 160;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - (type === 'splat' ? 40 : 80),
+      life: 0.4 + Math.random() * 0.4,
+      maxLife: 0.4 + Math.random() * 0.4,
+      size: type === 'splat' ? 3 + Math.random() * 4 : 2 + Math.random() * 6,
+      color: type === 'splat' ? `hsl(${190 + Math.random()*20},90%,${50+Math.random()*30}%)` : `hsl(${20+Math.random()*30},100%,${50+Math.random()*30}%)`
+    });
+  }
+  STATE.effects.push({ x, y, type, particles, age: 0, flash: 1.0 });
+}
+
+function handleCollision(proj) {
+  if (!STATE.wall) return;
+  const correct = proj.type === STATE.wall.type;
+  const cx = STATE.wall.cutX + STATE.wall.cutW / 2;
+  const cy = STATE.wall.y + STATE.wall.h / 2;
+  if (correct) {
+    STATE.score += 1;
+    addEffect(cx, cy, 'pass');
+  } else {
+    STATE.lives -= 1;
+    addEffect(cx, cy, proj.type === 'shark' ? 'splat' : 'boom');
+  }
+  STATE.wall = null;
+  STATE.projectiles = [];
+}
+
+function resetGame() {
+  STATE.score = 0;
+  STATE.lives = 3;
+  STATE.wall = null;
+  STATE.projectiles = [];
+  STATE.effects = [];
+  spawnWall();
+}
+
+function drawShark(x, y, s, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha || 1;
+  ctx.translate(x, y);
+  const sc = s / 28;
+  ctx.scale(sc, sc);
+  ctx.fillStyle = '#1a8ccc';
+  ctx.beginPath();
+  ctx.moveTo(-14, 0);
+  ctx.quadraticCurveTo(-8, -10, 8, -6);
+  ctx.lineTo(14, 0);
+  ctx.lineTo(8, 4);
+  ctx.quadraticCurveTo(0, 8, -10, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#0d5a8a';
+  ctx.beginPath();
+  ctx.moveTo(-6, -4);
+  ctx.lineTo(-2, -12);
+  ctx.lineTo(2, -4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(6, -2, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(6.5, -2, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPlane(x, y, s, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha || 1;
+  ctx.translate(x, y);
+  const sc = s / 28;
+  ctx.scale(sc, sc);
+  ctx.fillStyle = '#8a8a8a';
+  ctx.beginPath();
+  ctx.moveTo(-14, 0);
+  ctx.lineTo(-4, -3);
+  ctx.lineTo(14, 0);
+  ctx.lineTo(-4, 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#555';
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-3, -10);
+  ctx.lineTo(3, -10);
+  ctx.lineTo(4, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-3, 10);
+  ctx.lineTo(3, 10);
+  ctx.lineTo(4, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#f44';
+  ctx.beginPath();
+  ctx.moveTo(14, 0);
+  ctx.lineTo(10, -2);
+  ctx.lineTo(10, 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawWall(wall) {
+  if (!wall) return;
+  ctx.fillStyle = '#2a2a3a';
+  ctx.fillRect(0, wall.y, W, wall.h);
+  ctx.clearRect(wall.cutX, wall.y, wall.cutW, wall.h);
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(wall.cutX, wall.y, wall.cutW, wall.h);
+  const iconSize = 18;
+  const icon = wall.type === 'shark' ? drawShark : drawPlane;
+  icon(wall.cutX + wall.cutW / 2, wall.y + wall.h / 2, iconSize, 0.3);
+}
+
+function drawProjectiles() {
+  STATE.projectiles.forEach(p => {
+    const draw = p.type === 'shark' ? drawShark : drawPlane;
+    draw(p.x, p.y, p.r * 2, 1);
+  });
+}
+
+function drawEffects(dt) {
+  STATE.effects.forEach(e => {
+    e.age += dt;
+    e.flash = Math.max(0, e.flash - dt * 4);
+    if (e.flash > 0) {
+      ctx.save();
+      ctx.globalAlpha = e.flash * 0.4;
+      ctx.fillStyle = e.type === 'splat' ? '#1a8ccc' : e.type === 'boom' ? '#f80' : '#0f0';
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, 30, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    e.particles.forEach(p => {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 200 * dt;
+      p.life -= dt;
+      if (p.life > 0) {
+        ctx.save();
+        ctx.globalAlpha = (p.life / p.maxLife) * 0.8;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    });
+  });
+  STATE.effects = STATE.effects.filter(e => e.age < 1.2);
+}
+
+function drawBg() {
+  ctx.fillStyle = '#0a0a0f';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#1a1a2a';
+  ctx.lineWidth = 1;
+  for (let y = 0; y < H; y += 40) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#0d0d1a';
+  for (let x = 0; x < W; x += 40) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+    ctx.stroke();
+  }
+}
+
+let lastTime = 0;
+function loop(ts) {
+  if (!STATE.running) return;
+  const dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+
+  drawBg();
+
+  if (STATE.wall) {
+    const speed = BASE_WALL_SPEED + Math.floor(STATE.score / 5) * 25;
+    STATE.wall.y += speed * dt;
+    if (STATE.wall.y > H) {
+      STATE.lives -= 1;
+      addEffect(W / 2, H - 40, 'boom');
+      STATE.wall = null;
+    }
+  }
+  if (!STATE.wall) {
+    setTimeout(() => { if (STATE.running) spawnWall(); }, 300);
+  }
+
+  STATE.projectiles.forEach(p => { p.y += p.vy * dt; });
+
+  if (STATE.wall) {
+    STATE.projectiles.forEach(p => {
+      if (p.y - p.r <= STATE.wall.y + STATE.wall.h && p.y + p.r >= STATE.wall.y) {
+        handleCollision(p);
+      }
+    });
+  }
+
+  STATE.projectiles = STATE.projectiles.filter(p => p.y + p.r > -20);
+
+  drawWall(STATE.wall);
+  drawProjectiles();
+  drawEffects(dt);
+
+  scoreVal.textContent = 'SCORE: ' + STATE.score;
+  livesVal.textContent = 'LIVES: ' + STATE.lives;
+
+  if (STATE.lives <= 0) {
+    STATE.running = false;
+    gameOverEl.style.display = 'block';
+    finalScoreEl.style.display = 'block';
+    finalScoreEl.textContent = 'Final score: ' + STATE.score;
+    restartBtn.style.display = 'inline-block';
+    hud.style.display = 'none';
+    zone.style.display = 'none';
+    hint.style.display = 'none';
+    return;
+  }
+
+  requestAnimationFrame(loop);
+}
+
+function startGame() {
+  overlay.classList.remove('active');
+  titleEl.style.display = 'none';
+  subtitleEl.style.display = 'none';
+  startBtn.style.display = 'none';
+  gameOverEl.style.display = 'none';
+  finalScoreEl.style.display = 'none';
+  restartBtn.style.display = 'none';
+  hud.style.display = 'flex';
+  zone.style.display = 'block';
+  hint.style.display = 'block';
+  resetGame();
+  STATE.running = true;
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+startBtn.addEventListener('click', startGame);
+restartBtn.addEventListener('click', startGame);
+
+sharkZone.addEventListener('click', () => fireProjectile('shark'));
+planeZone.addEventListener('click', () => fireProjectile('plane'));
+sharkZone.addEventListener('touchstart', (e) => { e.preventDefault(); fireProjectile('shark'); }, { passive: false });
+planeZone.addEventListener('touchstart', (e) => { e.preventDefault(); fireProjectile('plane'); }, { passive: false });
+
+let touchStartX = 0;
+document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (!STATE.running) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(dx) > 30) {
+    fireProjectile(dx < 0 ? 'shark' : 'plane');
+  }
+}, { passive: true });
+
+document.addEventListener('keydown', (e) => {
+  if (!STATE.running) return;
+  if (e.key === 'ArrowLeft' || e.key === 'a') fireProjectile('shark');
+  if (e.key === 'ArrowRight' || e.key === 'd') fireProjectile('plane');
+});
+</script>
 </body>
 </html>
