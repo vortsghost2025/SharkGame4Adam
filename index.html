@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <title>Shark vs Plane</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:'Courier New',monospace;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 body{display:flex;flex-direction:column;align-items:center;justify-content:center}
 canvas{display:block;width:100%;height:100%;position:fixed;top:0;left:0;z-index:1}
-#overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(10,10,15,.92);transition:opacity .3s}
+#overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(10,10,15,.92);transition:opacity .4s}
 #overlay.hidden{opacity:0;pointer-events:none}
 #title{font-size:clamp(28px,8vw,56px);font-weight:900;letter-spacing:4px;text-transform:uppercase;text-shadow:0 0 20px #0af,0 0 40px #0af;margin-bottom:8px;text-align:center}
 #subtitle{font-size:clamp(11px,2.8vw,16px);opacity:.55;margin-bottom:clamp(20px,5vh,40px);letter-spacing:2px;text-align:center;padding:0 16px}
@@ -19,273 +19,1516 @@ canvas{display:block;width:100%;height:100%;position:fixed;top:0;left:0;z-index:
 #goScore{font-size:clamp(13px,3.5vw,18px);margin-bottom:clamp(16px,4vh,28px);opacity:.65;display:none}
 #hud{position:fixed;top:0;left:0;width:100%;padding:clamp(8px,2vw,14px) clamp(12px,3vw,18px);display:flex;justify-content:space-between;z-index:10;pointer-events:none;font-size:clamp(12px,3vw,16px);font-weight:700;letter-spacing:1px}
 #scoreVal{color:#0f0}
+#levelVal{color:#0af}
+#comboVal{color:#ff0}
 #livesVal{color:#f44}
-#controls{position:fixed;bottom:0;left:0;width:100%;z-index:10;display:none}
-#controls-row{display:flex;width:100%}
-.ctrl{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:clamp(10px,2.5vh,20px);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .08s;min-height:clamp(60px,14vh,100px)}
-.ctrl:active{background:rgba(0,170,255,.08)}
-.ctrl-icon{font-size:clamp(28px,7vw,48px);filter:drop-shadow(0 0 6px rgba(0,170,255,.35))}
-.ctrl-label{font-size:clamp(9px,2.2vw,12px);opacity:.35;letter-spacing:2px;text-transform:uppercase;margin-top:2px}
-#hint{position:fixed;bottom:clamp(2px,.5vh,6px);width:100%;text-align:center;font-size:clamp(8px,1.8vw,10px);opacity:.2;letter-spacing:1px;z-index:10;pointer-events:none}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="overlay">
   <div id="title">Shark vs Plane</div>
-  <div id="subtitle">Flick the right one through the hole</div>
+  <div id="subtitle">Fling the right one through the hole</div>
+  <div id="hiScore" style="font-size:clamp(11px,2.5vw,14px);opacity:.45;margin-bottom:clamp(12px,3vh,24px);letter-spacing:1px"></div>
   <button class="btn" id="startBtn">Start</button>
   <div id="goTitle">Game Over</div>
   <div id="goScore"></div>
   <button class="btn" id="restartBtn" style="display:none">Again</button>
 </div>
 <div id="hud" style="display:none">
-  <div id="scoreVal">SCORE: 0</div>
-  <div id="livesVal">LIVES: 3</div>
+<div id="scoreVal">SCORE: 0</div>
+<div id="levelVal">LV 1</div>
+<div id="comboVal"></div>
+<div id="speedVal" style="color:#f80;font-size:clamp(10px,2.5vw,13px)"></div>
+<div id="livesVal">LIVES: 3</div>
 </div>
-<div id="controls">
-  <div id="controls-row">
-    <div class="ctrl" id="sharkCtrl"><div class="ctrl-icon">&#x1F988;</div><div class="ctrl-label">Shark</div></div>
-    <div class="ctrl" id="planeCtrl"><div class="ctrl-icon">&#x2708;</div><div class="ctrl-label">Plane</div></div>
-  </div>
-</div>
-<div id="hint" style="display:none">TAP LEFT / RIGHT &bull; SWIPE &bull; ARROW KEYS</div>
 
 <script>
+// ═══════════════════════════════════════════════════════════════════
+//  SHARK vs PLANE — Assembly-Line Flick Game
+//  Walls with silhouette cutouts converge toward the player.
+//  Drag & fling the matching object from the bottom bins.
+// ═══════════════════════════════════════════════════════════════════
+
 const $ = id => document.getElementById(id);
 const canvas = $('c');
 const ctx = canvas.getContext('2d');
-
 let W, H, dpr;
+
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
-  W = window.innerWidth;
-  H = window.innerHeight;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 resize();
 window.addEventListener('resize', resize);
 
+// ─── Sound effects (Web Audio API — no external files) ──────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+function ensureAudio() { if (!audioCtx) audioCtx = new AudioCtx(); }
+
+function playTone(freq, duration, type, vol, rampDown) {
+  try {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    if (rampDown) osc.frequency.exponentialRampToValueAtTime(rampDown, audioCtx.currentTime + duration);
+    gain.gain.setValueAtTime(vol || 0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + duration);
+  } catch(e) {}
+}
+
+function playNoise(duration, vol) {
+  try {
+    ensureAudio();
+    const bufSize = audioCtx.sampleRate * duration;
+    const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * 0.5;
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(vol || 0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    src.connect(gain); gain.connect(audioCtx.destination);
+    src.start(); src.stop(audioCtx.currentTime + duration);
+  } catch(e) {}
+}
+
+function sfxFling() { playTone(220, 0.12, 'sawtooth', 0.1, 880); }
+function sfxPass() { playTone(660, 0.15, 'square', 0.12); setTimeout(() => playTone(880, 0.15, 'square', 0.1), 80); }
+function sfxSplat() { playNoise(0.25, 0.15); playTone(120, 0.3, 'sawtooth', 0.1, 40); }
+function sfxBoom() { playNoise(0.35, 0.2); playTone(80, 0.4, 'sawtooth', 0.15, 20); }
+function sfxLevelUp() { [440, 550, 660, 880].forEach((f, i) => setTimeout(() => playTone(f, 0.15, 'square', 0.1), i * 70)); }
+function sfxGameOver() { [440, 330, 220, 110].forEach((f, i) => setTimeout(() => playTone(f, 0.25, 'sawtooth', 0.1), i * 120)); }
+function sfxMiss() { playTone(200, 0.2, 'triangle', 0.1, 80); }
+
+// ─── Constants ──────────────────────────────────────────────────
+const BASE_WALL_SPEED  = 75;   // px/s at level 1
+const SPEED_RAMP       = 15;   // extra px/s per level
+const WALL_GAP         = 0.85; // seconds between walls
+const BIN_W_RATIO      = 0.38;
+const BIN_H            = 100;
+const BIN_BOTTOM_PAD   = 14;
+const MAX_LIVES        = 3;
+const PROJ_GRAVITY     = 180;  // px/s² (light gravity for arc)
+const MIN_FLING_DIST   = 12;
+
+// ─── Level themes ───────────────────────────────────────────────
+const THEMES = [
+  { name:'OCEAN',    bg1:'#040c1a', bg2:'#0a1e38', grid:'#0c1e3a', accent:'#0af', ground:'#081e35', beltDot:'rgba(0,170,255,0.04)',
+    particleColor:'rgba(100,200,255,0.3)', particleType:'bubbles', wallColor1:'#2a4a6a', wallColor2:'#3a6a9a', wallColor3:'#2a5a8a',
+    skyDraw:'ocean', sfxEnv:'ocean' },
+  { name:'DESERT',   bg1:'#1a1006', bg2:'#2e1c0b', grid:'#3a2810', accent:'#f80', ground:'#3a2510', beltDot:'rgba(255,136,0,0.04)',
+    particleColor:'rgba(210,170,100,0.35)', particleType:'sand', wallColor1:'#5a4a30', wallColor2:'#7a6a40', wallColor3:'#6a5a38',
+    skyDraw:'desert', sfxEnv:'desert' },
+  { name:'ARCTIC',   bg1:'#061218', bg2:'#0c2230', grid:'#103838', accent:'#0ef', ground:'#0a2838', beltDot:'rgba(0,238,255,0.04)',
+    particleColor:'rgba(200,230,255,0.4)', particleType:'snow', wallColor1:'#4a6a7a', wallColor2:'#6a8a9a', wallColor3:'#5a7a8a',
+    skyDraw:'arctic', sfxEnv:'arctic' },
+  { name:'VOLCANO',  bg1:'#1a0606', bg2:'#2e0b0b', grid:'#3a1212', accent:'#f44', ground:'#380c0c', beltDot:'rgba(255,68,68,0.04)',
+    particleColor:'rgba(255,120,30,0.4)', particleType:'embers', wallColor1:'#5a2a2a', wallColor2:'#7a3a3a', wallColor3:'#6a3030',
+    skyDraw:'volcano', sfxEnv:'volcano' },
+];
+function getTheme(lv) { return THEMES[lv % THEMES.length]; }
+function getLevel(score) { return Math.floor(score / 8) + 1; }
+
+// ─── Environmental particles ────────────────────────────────────
+const ENV_PARTICLES = [];
+const MAX_ENV = 60;
+
+function spawnEnvParticle() {
+  const theme = getTheme(G.level - 1);
+  const type = theme.particleType;
+  let p;
+  if (type === 'bubbles') {
+    p = { x: Math.random() * W, y: H + 10, vx: (Math.random()-0.5)*12, vy: -(30 + Math.random()*50),
+          sz: 3 + Math.random()*6, life: 3+Math.random()*4, max: 3+Math.random()*4, wobble: Math.random()*Math.PI*2 };
+  } else if (type === 'sand') {
+    p = { x: -10, y: Math.random() * H * 0.7, vx: 60 + Math.random()*100, vy: (Math.random()-0.3)*20,
+          sz: 1.5 + Math.random()*2.5, life: 2+Math.random()*3, max: 2+Math.random()*3 };
+  } else if (type === 'snow') {
+    p = { x: Math.random() * W, y: -10, vx: (Math.random()-0.5)*25, vy: 25 + Math.random()*45,
+          sz: 2 + Math.random()*4, life: 4+Math.random()*4, max: 4+Math.random()*4, wobble: Math.random()*Math.PI*2 };
+  } else if (type === 'embers') {
+    p = { x: W * 0.3 + Math.random() * W * 0.4, y: H + 5, vx: (Math.random()-0.5)*40, vy: -(50 + Math.random()*80),
+          sz: 2 + Math.random()*4, life: 2+Math.random()*3, max: 2+Math.random()*3, wobble: Math.random()*Math.PI*2 };
+  }
+  if (p) ENV_PARTICLES.push(p);
+}
+
+function updateEnvParticles(dt) {
+  // Spawn new particles
+  if (ENV_PARTICLES.length < MAX_ENV && Math.random() < 0.3) spawnEnvParticle();
+
+  const theme = getTheme(G.level - 1);
+  const type = theme.particleType;
+
+  ENV_PARTICLES.forEach(p => {
+    p.life -= dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    // Type-specific motion
+    if (type === 'bubbles') {
+      p.wobble += dt * 3;
+      p.x += Math.sin(p.wobble) * 0.8;
+    } else if (type === 'snow') {
+      p.wobble += dt * 2;
+      p.x += Math.sin(p.wobble) * 12 * dt;
+    } else if (type === 'embers') {
+      p.wobble += dt * 5;
+      p.x += Math.sin(p.wobble) * 20 * dt;
+    }
+  });
+
+  // Remove dead particles
+  for (let i = ENV_PARTICLES.length - 1; i >= 0; i--) {
+    if (ENV_PARTICLES[i].life <= 0) ENV_PARTICLES.splice(i, 1);
+  }
+}
+
+function drawEnvParticles() {
+  const theme = getTheme(G.level - 1);
+  const type = theme.particleType;
+
+  ENV_PARTICLES.forEach(p => {
+    const a = Math.min(p.life / p.max, 1) * 0.6;
+    ctx.save();
+    ctx.globalAlpha = a;
+
+    if (type === 'bubbles') {
+      // Translucent bubble with highlight
+      ctx.strokeStyle = theme.particleColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.sz, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.fill();
+      // Highlight dot
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.beginPath(); ctx.arc(p.x - p.sz*0.3, p.y - p.sz*0.3, p.sz*0.2, 0, Math.PI*2); ctx.fill();
+    } else if (type === 'sand') {
+      ctx.fillStyle = theme.particleColor;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.sz, 0, Math.PI * 2); ctx.fill();
+    } else if (type === 'snow') {
+      // Soft snowflake
+      ctx.fillStyle = theme.particleColor;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.sz, 0, Math.PI * 2); ctx.fill();
+      // Cross shape for larger flakes
+      if (p.sz > 3) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(p.x - p.sz*0.7, p.y); ctx.lineTo(p.x + p.sz*0.7, p.y);
+        ctx.moveTo(p.x, p.y - p.sz*0.7); ctx.lineTo(p.x, p.y + p.sz*0.7);
+        ctx.stroke();
+      }
+    } else if (type === 'embers') {
+      // Glowing ember
+      const hue = 15 + Math.random() * 25;
+      ctx.fillStyle = `hsl(${hue},90%,55%)`;
+      ctx.shadowColor = `hsl(${hue},90%,55%)`;
+      ctx.shadowBlur = 6;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.sz, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+
+// ─── High score persistence ────────────────────────────────────
+function getHighScore() { return parseInt(localStorage.getItem('sharkVsPlane_hi') || '0', 10); }
+function setHighScore(s) { localStorage.setItem('sharkVsPlane_hi', s); }
+
+// ─── Game state ─────────────────────────────────────────────────
 const G = {
-  score: 0, lives: 3, wall: null, projs: [], fx: [],
-  running: false, wallCooldown: 0, pendingWall: false, paused: false
+  score: 0, lives: MAX_LIVES, level: 1, combo: 0, bestCombo: 0,
+  walls: [], projs: [], fx: [], texts: [],
+  running: false, wallTimer: 0, paused: false,
+  // Drag state
+  ptrDown: false, ptrId: null,
+  dragStartX: 0, dragStartY: 0,
+  dragCurX: 0,  dragCurY: 0,
+  dragType: null,
+  // Screen shake
+  shakeX: 0, shakeY: 0, shakeTime: 0, shakeIntensity: 0,
+  // Level flash
+  levelFlash: 0,
+  // Time
+  gameTime: 0,
 };
-const WALL_H = 30;
-const PROJ_SPEED = 500;
-const BASE_WALL_SPEED = 65;
-const WALL_GAP = 0.8;
 
-function rng() { return Math.random() < 0.5 ? 'shark' : 'plane'; }
+// ─── Wall types ─────────────────────────────────────────────────
+// Base: shark, plane
+// Combo (unlocked at level 3+): shame (shark shape, wants plane), plark (plane shape, wants shark)
+const BASE_TYPES  = ['shark','plane'];
+const COMBO_TYPES = ['shame','plark'];
 
+function wallPool() {
+  const lv = G.level;
+  if (lv < 3) return BASE_TYPES;
+  if (lv < 5) return [...BASE_TYPES, ...COMBO_TYPES];
+  return [...BASE_TYPES, ...COMBO_TYPES, ...COMBO_TYPES];
+}
+function randomWallType() {
+  const pool = wallPool();
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function cutoutShape(wt) {
+  if (wt === 'shame') return 'shark';
+  if (wt === 'plark') return 'plane';
+  return wt;
+}
+function requiredThrow(wt) {
+  if (wt === 'shame') return 'plane';
+  if (wt === 'plark') return 'shark';
+  return wt;
+}
+
+// ─── Shape drawing ──────────────────────────────────────────────
+// Shark shape — centered at (0,0), about ±45 units
+function drawShark(x, y, size, alpha, tint) {
+  ctx.save();
+  ctx.globalAlpha = alpha != null ? alpha : 1;
+  ctx.translate(x, y);
+  const s = size / 100;
+  ctx.scale(s, s);
+  const body = tint || '#1a8ccc';
+  // BODY
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-42, 4);
+  ctx.bezierCurveTo(-38, -12, -20, -22, 0, -18);
+  ctx.bezierCurveTo(12, -15, 22, -12, 32, -8);
+  ctx.lineTo(42, 0);
+  ctx.lineTo(32, 8);
+  ctx.bezierCurveTo(22, 14, 12, 18, 0, 18);
+  ctx.bezierCurveTo(-12, 16, -28, 12, -38, 7);
+  ctx.closePath();
+  ctx.fill();
+  // DORSAL FIN
+  ctx.beginPath();
+  ctx.moveTo(-8, -18);
+  ctx.bezierCurveTo(-10, -40, 0, -42, 4, -22);
+  ctx.closePath();
+  ctx.fill();
+  // TAIL
+  ctx.beginPath();
+  ctx.moveTo(36, -4);
+  ctx.lineTo(50, -20);
+  ctx.lineTo(44, 0);
+  ctx.lineTo(50, 16);
+  ctx.lineTo(36, 5);
+  ctx.closePath();
+  ctx.fill();
+  // PECTORAL FIN
+  ctx.beginPath();
+  ctx.moveTo(6, 12);
+  ctx.bezierCurveTo(10, 24, 18, 26, 14, 14);
+  ctx.closePath();
+  ctx.fill();
+  // BELLY
+  ctx.fillStyle = '#5bc8eb';
+  ctx.beginPath();
+  ctx.ellipse(-4, 8, 20, 6, 0, 0, Math.PI);
+  ctx.fill();
+  // EYE
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(20, -5, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(21.5, -5, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  // GILLS
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(8 + i * 5, -10);
+    ctx.lineTo(6 + i * 5, 2);
+    ctx.stroke();
+  }
+  // TEETH
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(-40, 4);
+  for (let i = 0; i < 7; i++) ctx.lineTo(-38 + i * 4, i % 2 === 0 ? 9 : 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Plane shape — centered at (0,0), about ±45 units
+function drawPlane(x, y, size, alpha, tint) {
+  ctx.save();
+  ctx.globalAlpha = alpha != null ? alpha : 1;
+  ctx.translate(x, y);
+  const s = size / 100;
+  ctx.scale(s, s);
+  const wing = tint || '#8a8a9a';
+  const fuse = tint || '#aab';
+  // WINGS
+  ctx.fillStyle = wing;
+  ctx.beginPath();
+  ctx.moveTo(-5, -3);
+  ctx.lineTo(-24, -32);
+  ctx.lineTo(-12, -32);
+  ctx.lineTo(8, -4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-5, 3);
+  ctx.lineTo(-24, 32);
+  ctx.lineTo(-12, 32);
+  ctx.lineTo(8, 4);
+  ctx.closePath();
+  ctx.fill();
+  // FUSELAGE
+  ctx.fillStyle = fuse;
+  ctx.beginPath();
+  ctx.moveTo(-44, 0);
+  ctx.lineTo(-24, -5);
+  ctx.lineTo(24, -4);
+  ctx.lineTo(40, 0);
+  ctx.lineTo(24, 4);
+  ctx.lineTo(-24, 5);
+  ctx.closePath();
+  ctx.fill();
+  // COCKPIT
+  ctx.fillStyle = '#4af';
+  ctx.beginPath();
+  ctx.ellipse(-30, 0, 8, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#2cf';
+  ctx.beginPath();
+  ctx.ellipse(-31, -1, 5, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // TAIL
+  ctx.fillStyle = wing;
+  ctx.beginPath();
+  ctx.moveTo(32, 0);
+  ctx.lineTo(38, -16);
+  ctx.lineTo(44, -16);
+  ctx.lineTo(44, 0);
+  ctx.lineTo(44, 16);
+  ctx.lineTo(38, 16);
+  ctx.closePath();
+  ctx.fill();
+  // ENGINE GLOW
+  ctx.fillStyle = '#f80';
+  ctx.beginPath();
+  ctx.ellipse(-44, 0, 4, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ff0';
+  ctx.beginPath();
+  ctx.ellipse(-45, 0, 2, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // RED STRIPES
+  ctx.strokeStyle = '#f44';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-16, -5); ctx.lineTo(16, -4);
+  ctx.moveTo(-16, 5);  ctx.lineTo(16, 4);
+  ctx.stroke();
+  // STAR ROUNDRELL
+  ctx.fillStyle = '#f44';
+  ctx.beginPath(); ctx.arc(-4, 0, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(-4, 0, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Shame: shark body with tiny plane wings — wants a PLANE thrown at it
+function drawShame(x, y, size, alpha) {
+  drawShark(x, y, size, alpha, '#8a2be2');
+  // Tiny plane wings on the shark
+  ctx.save();
+  ctx.globalAlpha = (alpha != null ? alpha : 1) * 0.85;
+  ctx.translate(x, y);
+  const s = size / 100;
+  ctx.scale(s, s);
+  ctx.fillStyle = '#aab';
+  // Mini wings
+  ctx.beginPath(); ctx.moveTo(-5, -18); ctx.lineTo(-14, -30); ctx.lineTo(-4, -30); ctx.lineTo(4, -18); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-5, 18); ctx.lineTo(-14, 30); ctx.lineTo(-4, 30); ctx.lineTo(4, 18); ctx.closePath(); ctx.fill();
+  // Mini star
+  ctx.fillStyle = '#f44';
+  ctx.beginPath(); ctx.arc(22, 0, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Plark: plane body with shark dorsal fin — wants a SHARK thrown at it
+function drawPlark(x, y, size, alpha) {
+  drawPlane(x, y, size, alpha, '#ff1493');
+  // Shark dorsal fin on the plane
+  ctx.save();
+  ctx.globalAlpha = (alpha != null ? alpha : 1) * 0.85;
+  ctx.translate(x, y);
+  const s = size / 100;
+  ctx.scale(s, s);
+  ctx.fillStyle = '#1a8ccc';
+  // Dorsal fin
+  ctx.beginPath(); ctx.moveTo(-8, -5); ctx.bezierCurveTo(-10, -28, 0, -30, 4, -12); ctx.closePath(); ctx.fill();
+  // Tiny teeth on nose
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(-42, -2); ctx.lineTo(-40, -5); ctx.lineTo(-38, -2); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-40, 2); ctx.lineTo(-38, -1); ctx.lineTo(-36, 2); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawShape(type, x, y, size, alpha, tint) {
+  if (type === 'shark') drawShark(x, y, size, alpha, tint);
+  else if (type === 'plane') drawPlane(x, y, size, alpha, tint);
+  else if (type === 'shame') drawShame(x, y, size, alpha);
+  else if (type === 'plark') drawPlark(x, y, size, alpha);
+}
+
+// ─── Wall spawning ──────────────────────────────────────────────
 function spawnWall() {
-  const type = rng();
-  const cutW = Math.min(80, W * 0.22);
-  G.wall = { y: -WALL_H, type, cutX: (W - cutW) / 2, cutW, h: WALL_H };
-  G.pendingWall = false;
+  const type = randomWallType();
+  const shape = cutoutShape(type);
+  const cutW = Math.min(150, W * 0.36);
+  const cutH = cutW * 0.55;
+  const wallH = cutH + 36;
+  const margin = cutW / 2 + 30;
+  const cx = margin + Math.random() * Math.max(1, W - margin * 2);
+  G.walls.push({
+    type, shape,
+    y: 0, depth: 0, // Start far away (0 = distant, approaches 2.0 = in your face)
+    cx, cutX: cx - cutW / 2, cutW, cutH, h: wallH,
+    state: 'advancing',
+    timer: 0,
+  });
 }
 
-function fire(type) {
-  if (!G.running || !G.wall || G.grace > 0) return;
-  const x = type === 'shark' ? W * 0.25 : W * 0.75;
-  G.projs.push({ x, y: H * 0.82, type, vy: -PROJ_SPEED, r: 14 });
+// ─── Bins ───────────────────────────────────────────────────────
+function binRect(type) {
+  const bw = W * BIN_W_RATIO;
+  const x = type === 'shark' ? 0 : W - bw;
+  const y = H - BIN_H - BIN_BOTTOM_PAD;
+  return { x, y, w: bw, h: BIN_H };
 }
 
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+function drawBins() {
+  // Shark bin (left)
+  const sr = binRect('shark');
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,60,100,0.2)';
+  ctx.strokeStyle = 'rgba(26,140,204,0.35)';
+  ctx.lineWidth = 2;
+  roundRect(sr.x + 6, sr.y, sr.w - 12, sr.h, 14);
+  ctx.fill(); ctx.stroke();
+  // Label
+  ctx.fillStyle = 'rgba(26,140,204,0.45)';
+  ctx.font = `bold ${Math.max(10, W * 0.024)}px "Courier New",monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText('SHARK', sr.x + sr.w / 2, sr.y - 2);
+  // Stacked items
+  const sz = Math.min(65, sr.w * 0.26);
+  for (let i = 0; i < 3; i++) {
+    const ox = (i - 1) * sz * 0.5;
+    const oy = i * 4;
+    drawShark(sr.x + sr.w / 2 + ox, sr.y + sr.h / 2 + oy + 12, sz, 0.25 + i * 0.18);
+  }
+  ctx.restore();
+
+  // Plane bin (right)
+  const pr = binRect('plane');
+  ctx.save();
+  ctx.fillStyle = 'rgba(80,80,100,0.2)';
+  ctx.strokeStyle = 'rgba(170,170,187,0.35)';
+  ctx.lineWidth = 2;
+  roundRect(pr.x + 6, pr.y, pr.w - 12, pr.h, 14);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(170,170,187,0.45)';
+  ctx.font = `bold ${Math.max(10, W * 0.024)}px "Courier New",monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText('PLANE', pr.x + pr.w / 2, pr.y - 2);
+  const psz = Math.min(65, pr.w * 0.26);
+  for (let i = 0; i < 3; i++) {
+    const ox = (i - 1) * psz * 0.5;
+    const oy = i * 4;
+    drawPlane(pr.x + pr.w / 2 + ox, pr.y + pr.h / 2 + oy + 12, psz, 0.25 + i * 0.18);
+  }
+  ctx.restore();
+}
+
+// ─── Wall rendering ─────────────────────────────────────────────
+// Helper: compute wall screen position from depth
+// depth 0 = far away (small), depth 2.0 = right in your face (large)
+function wallScreenY(w) {
+  const depthFactor = Math.max(0.05, Math.min(2.0, w.depth)); // clamp 0–2
+  const scale = Math.max(0.1, depthFactor * 0.45) + 0.1; // 0.1x (far) to ~1.0x (near)
+  const baseY = H * 0.38;
+  const scaledH = w.h * scale;
+  return { y: baseY - scaledH / 2, scale, scaledH };
+}
+
+function drawWallBody(w, offsetY) {
+  offsetY = offsetY || 0;
+  // Depth-based perspective: depth 0 = far/small, depth 2.0 = near/large (shooting range target coming at you)
+  const { y: baseY, scale, scaledH } = wallScreenY(w);
+  const y = baseY + offsetY;
+  const shape = w.shape;
+  const cutCX = w.cx;
+  const cutCY = y + scaledH / 2;
+  const cutW = w.cutW * scale;
+  const theme = getTheme(G.level - 1);
+
+  // Target panel dimensions (shooting range style — square-ish board)
+  const panelPadX = cutW * 0.55; // padding around cutout
+  const panelPadY = scaledH * 0.25;
+  const panelX = cutCX - cutW / 2 - panelPadX;
+  const panelW = cutW + panelPadX * 2;
+  const panelY = y;
+  const panelH = scaledH;
+
+  // Fill target panel with cutout using evenodd clipping
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(panelX, panelY, panelW, panelH); // outer = panel shape
+
+  // Inner shape hole — trace reversed for evenodd
+  ctx.save();
+  ctx.translate(cutCX, cutCY);
+  const sc = -cutW / 100; // negative scale = reversed winding
+  ctx.scale(sc, sc);
+  ctx.beginPath();
+  if (shape === 'shark') {
+    ctx.moveTo(-42, 4);
+    ctx.bezierCurveTo(-38, -12, -20, -22, 0, -18);
+    ctx.bezierCurveTo(12, -15, 22, -12, 32, -8);
+    ctx.lineTo(42, 0);
+    ctx.lineTo(32, 8);
+    ctx.bezierCurveTo(22, 14, 12, 18, 0, 18);
+    ctx.bezierCurveTo(-12, 16, -28, 12, -38, 7);
+    ctx.closePath();
+  } else {
+    ctx.moveTo(-44, 0);
+    ctx.lineTo(-24, -5);
+    ctx.lineTo(24, -4);
+    ctx.lineTo(40, 0);
+    ctx.lineTo(24, 4);
+    ctx.lineTo(-24, 5);
+    ctx.closePath();
+  }
+  ctx.restore();
+
+  ctx.clip('evenodd');
+
+  // Metallic panel gradient — theme-colored
+  const grad = ctx.createLinearGradient(panelX, y, panelX, y + scaledH);
+  grad.addColorStop(0, theme.wallColor1);
+  grad.addColorStop(0.25, theme.wallColor2);
+  grad.addColorStop(0.5, theme.wallColor3);
+  grad.addColorStop(0.75, theme.wallColor2);
+  grad.addColorStop(1, theme.wallColor1);
+  ctx.fillStyle = grad;
+  ctx.fillRect(panelX, y, panelW, scaledH);
+
+  // Rivet lines on panel
+  ctx.strokeStyle = 'rgba(100,100,130,0.25)';
+  ctx.lineWidth = 1;
+  for (let rx = panelX; rx < panelX + panelW; rx += 40) {
+    ctx.beginPath(); ctx.moveTo(rx, y); ctx.lineTo(rx, y + scaledH); ctx.stroke();
+  }
+  // Horizontal details
+  ctx.strokeStyle = 'rgba(100,100,130,0.12)';
+  ctx.beginPath();
+  ctx.moveTo(panelX, y + scaledH * 0.3); ctx.lineTo(panelX + panelW, y + scaledH * 0.3);
+  ctx.moveTo(panelX, y + scaledH * 0.7); ctx.lineTo(panelX + panelW, y + scaledH * 0.7);
+  ctx.stroke();
+  ctx.restore();
+
+  // Target panel border (shooting range style frame)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(200,200,220,0.5)';
+  ctx.lineWidth = Math.max(2, 3 * scale);
+  ctx.strokeRect(panelX, panelY, panelW, panelH);
+  // Inner border highlight
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = Math.max(1, 1.5 * scale);
+  ctx.strokeRect(panelX + 2, panelY + 2, panelW - 4, panelH - 4);
+  // Corner bolts (shooting range target feel)
+  const boltR = Math.max(2, 4 * scale);
+  const boltOff = Math.max(6, 10 * scale);
+  ctx.fillStyle = 'rgba(180,180,200,0.6)';
+  [[panelX + boltOff, panelY + boltOff], [panelX + panelW - boltOff, panelY + boltOff],
+   [panelX + boltOff, panelY + panelH - boltOff], [panelX + panelW - boltOff, panelY + panelH - boltOff]
+  ].forEach(([bx, by]) => { ctx.beginPath(); ctx.arc(bx, by, boltR, 0, Math.PI * 2); ctx.fill(); });
+  ctx.restore();
+
+  // Ghost silhouette in the hole (faint) — shows the hybrid creature for combo types
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  if (w.type === 'shame') drawShame(cutCX, cutCY, cutW * 0.8, 0.12);
+  else if (w.type === 'plark') drawPlark(cutCX, cutCY, cutW * 0.8, 0.12);
+  else drawShape(shape, cutCX, cutCY, cutW * 0.8, 0.12, theme.accent);
+  ctx.restore();
+
+  // Glowing cutout border
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = theme.accent;
+  ctx.lineWidth = 2.5;
+  ctx.shadowColor = theme.accent;
+  ctx.shadowBlur = 12;
+  ctx.translate(cutCX, cutCY);
+  const bs = cutW / 100;
+  ctx.scale(bs, bs);
+  ctx.beginPath();
+  if (shape === 'shark') {
+    ctx.moveTo(-42, 4);
+    ctx.bezierCurveTo(-38, -12, -20, -22, 0, -18);
+    ctx.bezierCurveTo(12, -15, 22, -12, 32, -8);
+    ctx.lineTo(42, 0);
+    ctx.lineTo(32, 8);
+    ctx.bezierCurveTo(22, 14, 12, 18, 0, 18);
+    ctx.bezierCurveTo(-12, 16, -28, 12, -38, 7);
+    ctx.closePath();
+  } else {
+    ctx.moveTo(-44, 0);
+    ctx.lineTo(-24, -5);
+    ctx.lineTo(24, -4);
+    ctx.lineTo(40, 0);
+    ctx.lineTo(24, 4);
+    ctx.lineTo(-24, 5);
+    ctx.closePath();
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Combo-type hint labels
+  if (w.type === 'shame' || w.type === 'plark') {
+    const req = requiredThrow(w.type);
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    // Top label: combo name
+    ctx.fillStyle = '#f0f';
+    ctx.font = `bold ${Math.max(12, W * 0.032)}px "Courier New",monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(w.type.toUpperCase() + '!', cutCX, y - 2);
+    // Bottom label: what to throw
+    ctx.fillStyle = req === 'shark' ? '#1a8ccc' : '#aab';
+    ctx.font = `bold ${Math.max(10, W * 0.026)}px "Courier New",monospace`;
+    ctx.textBaseline = 'top';
+    ctx.fillText('THROW ' + req.toUpperCase(), cutCX, y + scaledH + 4);
+    ctx.restore();
+  }
+}
+
+// ─── Particle effects ───────────────────────────────────────────
 function boom(x, y, kind) {
   const ps = [];
-  const n = kind === 'splat' ? 14 : kind === 'boom' ? 20 : 8;
+  let n, hueBase;
+  if (kind === 'pass')       { n = 22; hueBase = 120; }
+  else if (kind === 'splat') { n = 28; hueBase = 190; }
+  else if (kind === 'boom')  { n = 35; hueBase = 15; }
+  else { n = 10; hueBase = 60; }
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2;
-    const spd = 50 + Math.random() * 180;
-    const hue = kind === 'splat' ? 190 + Math.random() * 25
-              : kind === 'boom' ? 15 + Math.random() * 30
-              : 120 + Math.random() * 30;
+    const spd = 70 + Math.random() * 240;
+    const hue = hueBase + Math.random() * 40;
     ps.push({
-      x, y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - (kind==='boom'?60:30),
-      life: .35+Math.random()*.45, max: .35+Math.random()*.45,
-      sz: kind==='pass' ? 2+Math.random()*3 : 3+Math.random()*5,
-      col: `hsl(${hue},90%,${45+Math.random()*35}%)`
+      x, y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - (kind==='boom'?90:45),
+      life: 0.35+Math.random()*0.5, max: 0.35+Math.random()*0.5,
+      sz: kind==='pass' ? 2+Math.random()*4 : 3+Math.random()*7,
+      col: `hsl(${hue},90%,${45+Math.random()*30}%)`
     });
   }
   G.fx.push({ x, y, kind, ps, age: 0, flash: 1 });
 }
 
-function collide(p) {
-  if (!G.wall) return;
-  const ok = p.type === G.wall.type;
-  const cx = G.wall.cutX + G.wall.cutW / 2;
-  const cy = G.wall.y + G.wall.h / 2;
-  if (ok) { G.score++; boom(cx, cy, 'pass'); }
-  else { G.lives--; boom(cx, cy, p.type==='shark'?'splat':'boom'); }
-  G.wall = null;
-  G.wallCooldown = WALL_GAP;
-  G.projs = [];
+function addText(x, y, text, color, big) {
+  G.texts.push({ x, y, text, color, age: 0, maxAge: 1.4, big: !!big });
 }
 
-function drawShark(x, y, s, a) {
-  ctx.save(); ctx.globalAlpha = a||1; ctx.translate(x,y);
-  const k = s/28; ctx.scale(k,k);
-  ctx.fillStyle='#1a8ccc';
-  ctx.beginPath(); ctx.moveTo(-14,0);
-  ctx.quadraticCurveTo(-8,-10,8,-6); ctx.lineTo(14,0);
-  ctx.lineTo(8,4); ctx.quadraticCurveTo(0,8,-10,4); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#0d5a8a';
-  ctx.beginPath(); ctx.moveTo(-6,-4); ctx.lineTo(-2,-12); ctx.lineTo(2,-4); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#c0e8ff';
-  ctx.beginPath(); ctx.arc(6,-2,2.5,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#111';
-  ctx.beginPath(); ctx.arc(6.8,-2,1.1,0,Math.PI*2); ctx.fill();
-  ctx.restore();
+// ─── Screen shake ───────────────────────────────────────────────
+function shake(intensity, duration) {
+  G.shakeTime = duration;
+  G.shakeIntensity = intensity;
 }
 
-function drawPlane(x, y, s, a) {
-  ctx.save(); ctx.globalAlpha = a||1; ctx.translate(x,y);
-  const k = s/28; ctx.scale(k,k);
-  ctx.fillStyle='#999';
-  ctx.beginPath(); ctx.moveTo(-14,0); ctx.lineTo(-4,-3); ctx.lineTo(14,0);
-  ctx.lineTo(-4,3); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#666';
-  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-3,-10); ctx.lineTo(3,-10);
-  ctx.lineTo(4,0); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-3,10); ctx.lineTo(3,10);
-  ctx.lineTo(4,0); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#f44';
-  ctx.beginPath(); ctx.moveTo(14,0); ctx.lineTo(10,-2); ctx.lineTo(10,2); ctx.closePath(); ctx.fill();
-  ctx.restore();
+// ─── Collision ──────────────────────────────────────────────────
+function checkCollision(proj, wall) {
+  if (!wall || wall.state !== 'advancing') return false;
+  const { y: wallY, scale, scaledH } = wallScreenY(wall);
+  const cutCY = wallY + scaledH / 2;
+  const scaledCutW = wall.cutW * scale;
+  const dx = proj.x - wall.cx;
+  const dy = proj.y - cutCY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  // Generous hit radius — the cutout is forgiving
+  const hitR = scaledCutW * 0.48;
+  // Check projectile is near the wall's vertical band (generous vertical window)
+  const nearWall = proj.y >= wallY - 20 && proj.y <= wallY + scaledH + 20;
+  return dist < hitR && nearWall;
 }
 
-function drawIcon(type, x, y, s, a) {
-  (type==='shark'?drawShark:drawPlane)(x,y,s,a);
+function handleHit(proj, wall) {
+  const req = requiredThrow(wall.type);
+  const correct = proj.type === req;
+  const cx = wall.cx;
+  const { y: wallY, scaledH } = wallScreenY(wall);
+  const cy = wallY + scaledH / 2;
+
+  if (correct) {
+    G.score++;
+    G.combo++;
+    if (G.combo > G.bestCombo) G.bestCombo = G.combo;
+    const bonus = Math.min(G.combo - 1, 5);
+    if (bonus > 0) G.score += bonus;
+    G.level = getLevel(G.score);
+    wall.state = 'passing';
+    wall.timer = 0;
+    boom(cx, cy, 'pass');
+    sfxPass();
+    const label = bonus > 0 ? `+${1+bonus} COMBO x${G.combo}!` : '+1';
+    addText(cx, cy - 30, label, '#0f0', bonus > 2);
+  } else {
+    G.lives--;
+    G.combo = 0;
+    shake(6, 0.3);
+    if (proj.type === 'shark') {
+      wall.state = 'splat_shark';
+      wall.timer = 0;
+      boom(cx, cy, 'splat');
+      sfxSplat();
+      addText(cx, cy - 30, 'SPLAT!', '#1a8ccc');
+    } else {
+      wall.state = 'boom_plane';
+      wall.timer = 0;
+      boom(cx, cy, 'boom');
+      sfxBoom();
+      addText(cx, cy - 30, 'BOOM!', '#f44', true);
+    }
+  }
 }
 
-function drawWall(w) {
-  if (!w) return;
-  const y = w.y, h = w.h;
+// ─── Firing ─────────────────────────────────────────────────────
+function fireProjectile(type, fromX, fromY, vx, vy) {
+  if (!G.running || G.projs.length > 0) return;
+  sfxFling();
+  G.projs.push({ type, x: fromX, y: fromY, vx, vy, size: 55, alive: true, rot: 0 });
+}
+
+// ─── Input: drag & fling ────────────────────────────────────────
+function getPointerType(px, py) {
+  const sr = binRect('shark');
+  if (px >= sr.x && px <= sr.x + sr.w && py >= sr.y - 20 && py <= sr.y + sr.h) return 'shark';
+  const pr = binRect('plane');
+  if (px >= pr.x && px <= pr.x + pr.w && py >= pr.y - 20 && py <= pr.y + pr.h) return 'plane';
+  return null;
+}
+
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (!G.running || G.projs.length > 0) return;
+  const t = getPointerType(e.clientX, e.clientY);
+  if (t) {
+    G.ptrDown = true;
+    G.ptrId = e.pointerId;
+    G.dragStartX = e.clientX; G.dragStartY = e.clientY;
+    G.dragCurX = e.clientX;   G.dragCurY = e.clientY;
+    G.dragType = t;
+    canvas.setPointerCapture(e.pointerId);
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (!G.ptrDown || e.pointerId !== G.ptrId) return;
+  G.dragCurX = e.clientX; G.dragCurY = e.clientY;
+});
+canvas.addEventListener('pointerup', e => {
+  if (!G.ptrDown || e.pointerId !== G.ptrId) return;
+  G.ptrDown = false;
+  if (G.dragType) {
+    const dx = G.dragCurX - G.dragStartX;
+    const dy = G.dragCurY - G.dragStartY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const br = binRect(G.dragType);
+    const startX = br.x + br.w / 2;
+    const startY = br.y;
+
+    // Find the nearest advancing wall to aim at
+    let targetX = W / 2;
+    let targetY = H * 0.3; // fallback aim point
+      const aw = G.walls.find(w => w.state === 'advancing');
+      if (aw) { targetX = aw.cx; const { y: awY, scaledH: awSH } = wallScreenY(aw); targetY = awY + awSH / 2; }
+
+      if (dist > MIN_FLING_DIST) {
+      // ─── Smart fling: calculate ballistic arc to hit the wall ───
+      // Horizontal distance to target
+      const distX = targetX - startX;
+      const distY = targetY - startY; // negative = above
+
+      // Use drag distance as power multiplier (0.5 to 1.5)
+      const power = Math.min(Math.max(dist / 60, 0.5), 1.5);
+
+      // Ballistic calculation: given gravity G, horizontal dist dx, vertical dist dy
+      // Choose flight time T, then: vx = dx/T, vy = (dy - 0.5*g*T²) / T
+      // Shorter T = flatter arc, longer T = higher arc
+      const flightTime = 0.7 / power; // ~0.47-1.4s
+      const vx = distX / flightTime;
+      const vy = (distY - 0.5 * PROJ_GRAVITY * flightTime * flightTime) / flightTime;
+
+      // Drag horizontal offset adds lateral aim influence (subtle)
+      const aimInfluence = Math.min(Math.abs(dx) / W, 0.15);
+      const lateralBias = dx > 0 ? aimInfluence : -aimInfluence;
+
+      fireProjectile(G.dragType, startX, startY, vx + lateralBias * 150, vy);
+    } else {
+      // Tap = auto-aim toward nearest wall with calculated arc
+      const distX = targetX - startX;
+      const distY = targetY - startY;
+      const flightTime = 0.65;
+      const vx = distX / flightTime;
+      const vy = (distY - 0.5 * PROJ_GRAVITY * flightTime * flightTime) / flightTime;
+      fireProjectile(G.dragType, startX, startY, vx, vy);
+    }
+  }
+  G.dragType = null;
+});
+canvas.addEventListener('pointercancel', () => { G.ptrDown = false; G.dragType = null; });
+
+// Keyboard fallback — auto-aim with ballistic arc
+document.addEventListener('keydown', e => {
+  if (!G.running || G.projs.length > 0) return;
+  let targetX = W / 2;
+  let targetY = H * 0.3;
+  const aw = G.walls.find(w => w.state === 'advancing');
+  if (aw) { targetX = aw.cx; const { y: awY, scaledH: awSH } = wallScreenY(aw); targetY = awY + awSH / 2; }
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+    const br = binRect('shark');
+    const startX = br.x + br.w / 2; const startY = br.y;
+    const ft = 0.65;
+    fireProjectile('shark', startX, startY,
+      (targetX - startX) / ft,
+      (targetY - startY - 0.5 * PROJ_GRAVITY * ft * ft) / ft);
+  }
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+    const br = binRect('plane');
+    const startX = br.x + br.w / 2; const startY = br.y;
+    const ft = 0.65;
+    fireProjectile('plane', startX, startY,
+      (targetX - startX) / ft,
+      (targetY - startY - 0.5 * PROJ_GRAVITY * ft * ft) / ft);
+  }
+});
+
+// ─── Background ─────────────────────────────────────────────────
+function drawBg() {
+  const theme = getTheme(G.level - 1);
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, theme.bg1);
+  grad.addColorStop(1, theme.bg2);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // ─── Per-theme sky features ───
+  if (theme.skyDraw === 'ocean') {
+    // Underwater caustic light beams
+    ctx.save();
+    for (let i = 0; i < 5; i++) {
+      const bx = (W * 0.15) + i * (W * 0.18);
+      const wobble = Math.sin(G.gameTime * 0.8 + i * 1.5) * 20;
+      ctx.globalAlpha = 0.04;
+      ctx.fillStyle = '#0af';
+      ctx.beginPath();
+      ctx.moveTo(bx + wobble, 0);
+      ctx.lineTo(bx + 40 + wobble, 0);
+      ctx.lineTo(bx + 80 + wobble * 0.5, H);
+      ctx.lineTo(bx - 20 + wobble * 0.5, H);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Wavy water lines
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 1;
+    for (let row = 0; row < 8; row++) {
+      const wy = row * (H * 0.1) + 30;
+      ctx.beginPath();
+      for (let x = 0; x < W; x += 8) {
+        const y = wy + Math.sin(x * 0.015 + G.gameTime * 1.2 + row) * 6;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+
+  } else if (theme.skyDraw === 'desert') {
+    // Sun / heat glow
+    ctx.save();
+    const sunX = W * 0.75;
+    const sunY = H * 0.12;
+    const sunGrad = ctx.createRadialGradient(sunX, sunY, 5, sunX, sunY, 120);
+    sunGrad.addColorStop(0, 'rgba(255,200,50,0.2)');
+    sunGrad.addColorStop(0.4, 'rgba(255,150,30,0.08)');
+    sunGrad.addColorStop(1, 'rgba(255,100,0,0)');
+    ctx.fillStyle = sunGrad;
+    ctx.fillRect(0, 0, W, H);
+    // Sun disc
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#fc0';
+    ctx.beginPath(); ctx.arc(sunX, sunY, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // Sand dune silhouettes
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = '#a08040';
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.65);
+    for (let x = 0; x <= W; x += 4) {
+      const y = H * 0.65 + Math.sin(x * 0.008 + 1) * 25 + Math.sin(x * 0.02) * 10;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // Heat shimmer lines
+    ctx.save();
+    ctx.globalAlpha = 0.05;
+    ctx.strokeStyle = '#fa0';
+    ctx.lineWidth = 1;
+    for (let row = 0; row < 4; row++) {
+      const wy = H * 0.4 + row * 18;
+      ctx.beginPath();
+      for (let x = 0; x < W; x += 6) {
+        const y = wy + Math.sin(x * 0.03 + G.gameTime * 2.5 + row * 2) * 3;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+
+  } else if (theme.skyDraw === 'arctic') {
+    // Aurora borealis
+    ctx.save();
+    for (let i = 0; i < 6; i++) {
+      const ay = H * 0.08 + i * 15;
+      const wobble = Math.sin(G.gameTime * 0.4 + i * 0.8) * 60;
+      ctx.globalAlpha = 0.04 + Math.sin(G.gameTime * 0.3 + i) * 0.02;
+      ctx.fillStyle = i % 2 === 0 ? '#0f8' : '#0af';
+      ctx.beginPath();
+      ctx.moveTo(-20, ay);
+      for (let x = 0; x <= W + 20; x += 10) {
+        const y = ay + Math.sin(x * 0.006 + G.gameTime * 0.5 + i) * 20 + wobble * (x / W);
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(W + 20, ay + 30);
+      ctx.lineTo(-20, ay + 30);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Ice crystal formations at top
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = '#cff';
+    for (let i = 0; i < 12; i++) {
+      const cx = i * (W / 11);
+      const ch = 15 + Math.sin(i * 2.3) * 12;
+      ctx.beginPath();
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx + 5, ch);
+      ctx.lineTo(cx - 5, ch);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+  } else if (theme.skyDraw === 'volcano') {
+    // Lava glow from below
+    ctx.save();
+    const lavaGrad = ctx.createLinearGradient(0, H, 0, H * 0.5);
+    lavaGrad.addColorStop(0, 'rgba(255,60,10,0.12)');
+    lavaGrad.addColorStop(0.5, 'rgba(255,30,0,0.04)');
+    lavaGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = lavaGrad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+
+    // Volcanic mountain silhouette
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#200';
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.55);
+    ctx.lineTo(W * 0.2, H * 0.3);
+    ctx.lineTo(W * 0.35, H * 0.45);
+    ctx.lineTo(W * 0.5, H * 0.22);
+    ctx.lineTo(W * 0.65, H * 0.4);
+    ctx.lineTo(W * 0.8, H * 0.28);
+    ctx.lineTo(W, H * 0.5);
+    ctx.lineTo(W, H);
+    ctx.lineTo(0, H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Smoke plumes
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = '#888';
+    for (let i = 0; i < 3; i++) {
+      const sx = W * (0.3 + i * 0.2);
+      const sy = H * 0.18 + Math.sin(G.gameTime * 0.5 + i * 2) * 15;
+      const sr = 30 + Math.sin(G.gameTime * 0.3 + i) * 10;
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 15, sy - 20, sr * 0.7, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Grid (all themes)
+  ctx.strokeStyle = theme.grid;
+  ctx.lineWidth = 1;
+  const g = 50;
+  for (let y = 0; y < H; y += g) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  for (let x = 0; x < W; x += g) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+
+  // Ground
+  ctx.fillStyle = theme.ground;
+  ctx.fillRect(0, H - BIN_H - BIN_BOTTOM_PAD - 22, W, BIN_H + BIN_BOTTOM_PAD + 22);
+
+  // Conveyor belt lines
+  const beltY = H * 0.38;
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([14, 9]);
+  ctx.beginPath(); ctx.moveTo(0, beltY); ctx.lineTo(W, beltY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, beltY + 3); ctx.lineTo(W, beltY + 3); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Belt dots
+  const offset = (G.gameTime * 80) % 32;
+  ctx.fillStyle = theme.beltDot;
+  for (let x = -32 + offset; x < W + 32; x += 32) {
+    ctx.beginPath(); ctx.arc(x, beltY + 1.5, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Theme name watermark
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, y, W, h);
-  ctx.rect(w.cutX+w.cutW, y, -w.cutW, h);
-  ctx.clip('evenodd');
-  ctx.fillStyle = '#2a2a3a';
-  ctx.fillRect(0, y, W, h);
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = theme.accent;
+  ctx.font = `bold ${Math.max(16, W * 0.045)}px "Courier New",monospace`;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText(theme.name, W - 14, 52);
   ctx.restore();
-  ctx.strokeStyle='#3a3a4f'; ctx.lineWidth=1.5;
-  ctx.strokeRect(w.cutX, y, w.cutW, h);
-  drawIcon(w.type, w.cutX+w.cutW/2, y+h/2, 16, .25);
+
+  // Level-up flash
+  if (G.levelFlash > 0) {
+    ctx.save();
+    ctx.globalAlpha = G.levelFlash * 0.15;
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
 }
 
+// ─── Projectile rendering ───────────────────────────────────────
 function drawProjs() {
-  G.projs.forEach(p => drawIcon(p.type, p.x, p.y, p.r*2, 1));
+  G.projs.forEach(p => {
+    if (!p.alive) return;
+    // Motion trail
+    ctx.save();
+    drawShape(p.type, p.x - p.vx * 0.018, p.y - p.vy * 0.018, p.size * 0.7, 0.15);
+    ctx.restore();
+    // Main
+    drawShape(p.type, p.x, p.y, p.size, 1);
+  });
 }
 
+// ─── Particle rendering ─────────────────────────────────────────
 function drawFx(dt) {
   G.fx.forEach(e => {
     e.age += dt;
-    e.flash = Math.max(0, e.flash - dt*5);
+    e.flash = Math.max(0, e.flash - dt * 4);
     if (e.flash > 0) {
-      ctx.save(); ctx.globalAlpha = e.flash*.35;
-      ctx.fillStyle = e.kind==='splat'?'#1a8ccc':e.kind==='boom'?'#f80':'#0f0';
-      ctx.beginPath(); ctx.arc(e.x,e.y,35,0,Math.PI*2); ctx.fill();
+      ctx.save(); ctx.globalAlpha = e.flash * 0.35;
+      const col = e.kind==='splat'?'#1a8ccc':e.kind==='boom'?'#f80':'#0f0';
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(e.x, e.y, 50, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
     e.ps.forEach(p => {
-      p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=220*dt; p.life-=dt;
-      if (p.life>0) {
-        ctx.save(); ctx.globalAlpha=(p.life/p.max)*.85;
-        ctx.fillStyle=p.col; ctx.beginPath();
-        ctx.arc(p.x,p.y,p.sz*(p.life/p.max),0,Math.PI*2); ctx.fill();
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 280 * dt; p.life -= dt;
+      if (p.life > 0) {
+        ctx.save(); ctx.globalAlpha = (p.life / p.max) * 0.8;
+        ctx.fillStyle = p.col;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.sz * (p.life / p.max), 0, Math.PI*2); ctx.fill();
         ctx.restore();
       }
     });
   });
-  G.fx = G.fx.filter(e => e.age < 1.4);
+  G.fx = G.fx.filter(e => e.age < 1.8);
 }
 
-function drawBg() {
-  ctx.fillStyle='#0a0a0f'; ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#13131f'; ctx.lineWidth=1;
-  const g = 50;
-  for (let y=0;y<H;y+=g){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-  for (let x=0;x<W;x+=g){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+// ─── Floating text ──────────────────────────────────────────────
+function drawTexts(dt) {
+  G.texts.forEach(t => {
+    t.age += dt; t.y -= 35 * dt;
+    const a = 1 - t.age / t.maxAge;
+    if (a > 0) {
+      ctx.save(); ctx.globalAlpha = a;
+      ctx.fillStyle = t.color;
+      const sz = t.big ? Math.max(22, W * 0.07) : Math.max(16, W * 0.05);
+      ctx.font = `bold ${sz}px "Courier New",monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = t.color; ctx.shadowBlur = 12;
+      ctx.fillText(t.text, t.x, t.y);
+      ctx.restore();
+    }
+  });
+  G.texts = G.texts.filter(t => t.age < t.maxAge);
 }
 
+// ─── Drag indicator ─────────────────────────────────────────────
+function drawDrag() {
+  if (!G.ptrDown || !G.dragType) return;
+  const dx = G.dragCurX - G.dragStartX;
+  const dy = G.dragCurY - G.dragStartY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  // Object following finger
+  drawShape(G.dragType, G.dragCurX, G.dragCurY, 55, 0.8);
+
+  // Predicted trajectory arc
+  if (dist > 8) {
+    const br = binRect(G.dragType);
+    const startX = br.x + br.w / 2;
+    const startY = br.y;
+
+    // Find target wall
+    let targetX = W / 2;
+    let targetY = H * 0.3;
+    const aw = G.walls.find(w => w.state === 'advancing');
+    if (aw) { targetX = aw.cx; const { y: awY, scaledH: awSH } = wallScreenY(aw); targetY = awY + awSH / 2; }
+
+    const power = Math.min(Math.max(dist / 60, 0.5), 1.5);
+    const flightTime = 0.7 / power;
+    const distX = targetX - startX;
+    const distY = targetY - startY;
+    const aimInfluence = Math.min(Math.abs(dx) / W, 0.15);
+    const lateralBias = dx > 0 ? aimInfluence : -aimInfluence;
+    const vx = distX / flightTime + lateralBias * 150;
+    const vy = (distY - 0.5 * PROJ_GRAVITY * flightTime * flightTime) / flightTime;
+
+    // Draw dotted arc
+    ctx.save();
+    ctx.strokeStyle = G.dragType === 'shark' ? '#1a8ccc' : '#aab';
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    const steps = 20;
+    const dt = flightTime / steps;
+    for (let i = 0; i <= steps; i++) {
+      const t = i * dt;
+      const px = startX + vx * t;
+      const py = startY + vy * t + 0.5 * PROJ_GRAVITY * t * t;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Crosshair at target
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#0f0';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(targetX, targetY, 12, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(targetX - 16, targetY); ctx.lineTo(targetX + 16, targetY);
+    ctx.moveTo(targetX, targetY - 16); ctx.lineTo(targetX, targetY + 16);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─── Wall state effects ─────────────────────────────────────────
+function drawSplatEffect(w, dt) {
+  w.timer += dt;
+  const p = Math.min(w.timer / 0.9, 1);
+  const cx = w.cx;
+  const { y: wallY, scaledH } = wallScreenY(w);
+  const cy = wallY + scaledH / 2;
+
+  // Draw the wall (stays in place during splat)
+  drawWallBody(w, 0);
+
+  // Shark sliding down + fading
+  ctx.save();
+  ctx.globalAlpha = 1 - p;
+  drawShark(cx, cy + p * 70, w.cutW * 0.55, 1 - p);
+  ctx.restore();
+
+  // Splat marks (persistent, fading)
+  ctx.save();
+  ctx.globalAlpha = (1 - p) * 0.5;
+  ctx.fillStyle = '#1a8ccc';
+  for (let i = 0; i < 6; i++) {
+    const sx = cx + (i - 3) * 8;
+    const sy = cy + 5 + i * 4;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 5 + i * 2, 2 + i, 0.3 * i, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  if (p >= 1) w.state = 'dead';
+}
+
+function drawBoomEffect(w, dt) {
+  w.timer += dt;
+  const p = Math.min(w.timer / 0.9, 1);
+  const cx = w.cx;
+  const { y: wallY, scale, scaledH } = wallScreenY(w);
+  const cy = wallY + scaledH / 2;
+  const scaledCutW = w.cutW * scale;
+
+  // Draw the wall
+  drawWallBody(w, 0);
+
+  // Explosion flash
+  if (p < 0.25) {
+    const fa = (1 - p / 0.25) * 0.9;
+    ctx.save(); ctx.globalAlpha = fa;
+      ctx.fillStyle = '#ff8800';
+      ctx.beginPath(); ctx.arc(cx, cy, scaledCutW * 0.55 * (p / 0.25), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath(); ctx.arc(cx, cy, scaledCutW * 0.3 * (p / 0.25), 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Debris pieces
+  ctx.save();
+  ctx.globalAlpha = (1 - p) * 0.7;
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + w.timer * 4;
+    const d = p * scaledCutW * 0.55;
+    ctx.fillStyle = i % 3 === 0 ? '#f44' : i % 3 === 1 ? '#aab' : '#ff0';
+    ctx.save();
+    ctx.translate(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+    ctx.rotate(a + w.timer * 8);
+    ctx.fillRect(-4, -2, 8, 4);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Fire particles
+  ctx.save();
+  ctx.globalAlpha = (1 - p) * 0.7;
+  for (let i = 0; i < 15; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = p * (25 + Math.random() * 50);
+    const px = cx + Math.cos(a) * d;
+    const py = cy + Math.sin(a) * d - p * 35;
+    const sz = (1 - p) * (2 + Math.random() * 5);
+    ctx.fillStyle = `hsl(${15 + Math.random() * 30},90%,${50 + Math.random() * 30}%)`;
+    ctx.beginPath(); ctx.arc(px, py, sz, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  if (p >= 1) w.state = 'dead';
+}
+
+function drawPassEffect(w, dt) {
+  w.timer += dt;
+  const p = Math.min(w.timer / 0.45, 1);
+  const cx = w.cx;
+  const { y: wallY, scale, scaledH } = wallScreenY(w);
+  const scaledCutW = w.cutW * scale;
+
+  // Wall slides off screen with fade
+  ctx.save();
+  ctx.globalAlpha = 1 - p;
+  ctx.translate(0, p * 100);
+  drawWallBody(w, 0);
+  ctx.restore();
+
+  // Sparkle trail through cutout
+  if (p < 0.5) {
+    ctx.save();
+    ctx.globalAlpha = (1 - p / 0.5) * 0.5;
+    ctx.fillStyle = '#0f0';
+    for (let i = 0; i < 8; i++) {
+      const sx = cx + (Math.random() - 0.5) * scaledCutW * 0.25;
+      const sy = wallY + scaledH / 2 + (Math.random() - 0.5) * scaledH * 0.4;
+      ctx.beginPath(); ctx.arc(sx, sy, 1.5 + Math.random() * 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (p >= 1) w.state = 'dead';
+}
+
+// ─── Main loop ──────────────────────────────────────────────────
 let lt = 0;
+
 function loop(ts) {
   if (!G.running) return;
-  const dt = Math.min((ts-lt)/1000, .05);
+  const dt = Math.min((ts - lt) / 1000, 0.05);
   lt = ts;
+ G.gameTime += dt;
+ updateEnvParticles(dt);
 
-  drawBg();
+ const prevLevel = G.level;
+  G.level = getLevel(G.score);
 
-  if (G.grace > 0) G.grace -= dt;
-
-  if (G.wallCooldown > 0) {
-    G.wallCooldown -= dt;
-    if (G.wallCooldown <= 0 && !G.wall && !G.pendingWall) {
-      G.pendingWall = true;
-      spawnWall();
-    }
+  // Level flash timer
+  if (G.levelFlash > 0) G.levelFlash -= dt * 2;
+  if (G.level > prevLevel) {
+    G.levelFlash = 1;
+    sfxLevelUp();
+    addText(W / 2, H * 0.35, 'LEVEL ' + G.level + '!', getTheme(G.level - 1).accent, true);
   }
 
-  if (G.wall) {
-    const spd = BASE_WALL_SPEED + Math.floor(G.score/5)*22;
-    G.wall.y += spd * dt;
-    if (G.wall.y > H) {
-      G.lives--;
-      boom(W/2, H-50, 'boom');
-      G.wall = null;
-      G.wallCooldown = WALL_GAP;
-    }
+  // Screen shake
+  if (G.shakeTime > 0) {
+    G.shakeTime -= dt;
+    G.shakeX = (Math.random() - 0.5) * G.shakeIntensity * 2;
+    G.shakeY = (Math.random() - 0.5) * G.shakeIntensity * 2;
+  } else {
+    G.shakeX = 0; G.shakeY = 0;
   }
 
-  G.projs.forEach(p => { p.y += p.vy * dt; });
+  // Wall spawning — allow multiple walls on screen as difficulty increases
+  G.wallTimer -= dt;
+  const maxAdvancing = G.level < 3 ? 1 : G.level < 6 ? 2 : 3;
+  if (G.wallTimer <= 0 && G.walls.filter(w => w.state === 'advancing').length < maxAdvancing) {
+    spawnWall();
+    G.wallTimer = WALL_GAP;
+  }
 
-  if (G.wall) {
-    for (let i = G.projs.length-1; i >= 0; i--) {
-      const p = G.projs[i];
-      if (p.y-p.r <= G.wall.y+G.wall.h && p.y+p.r >= G.wall.y) {
-        collide(p);
+  // Move advancing walls
+  const wallSpeed = BASE_WALL_SPEED + (G.level - 1) * SPEED_RAMP;
+  G.walls.forEach(w => {
+    if (w.state === 'advancing') {
+      w.depth += wallSpeed * dt * 0.003; // Scale factor: depth goes 0→2 over ~several seconds
+      if (w.depth > 2.0) { // Wall has reached/passed the player
+        G.lives--;
+        G.combo = 0;
+        shake(4, 0.2);
+        sfxMiss();
+        addText(w.cx, H * 0.5, 'MISSED!', '#f44', true);
+        w.state = 'dead';
+      }
+    }
+  });
+
+  // Move projectiles
+  G.projs.forEach(p => {
+    if (!p.alive) return;
+    p.vy += PROJ_GRAVITY * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.rot += p.vx * dt * 0.008;
+
+    for (const w of G.walls) {
+      if (w.state !== 'advancing') continue;
+      if (checkCollision(p, w)) {
+        handleHit(p, w);
+        p.alive = false;
         break;
       }
     }
-  }
+    if (p.y < -120 || p.y > H + 120 || p.x < -120 || p.x > W + 120) p.alive = false;
+  });
 
-  G.projs = G.projs.filter(p => p.y+p.r > -20);
+  G.projs = G.projs.filter(p => p.alive);
+  G.walls = G.walls.filter(w => w.state !== 'dead');
 
-  drawWall(G.wall);
+  // ─── DRAW ───
+  ctx.save();
+  ctx.translate(G.shakeX, G.shakeY);
+
+ drawBg();
+ drawEnvParticles();
+
+ // Walls
+  G.walls.forEach(w => {
+    if (w.state === 'advancing')    drawWallBody(w, 0);
+    else if (w.state === 'passing')  drawPassEffect(w, dt);
+    else if (w.state === 'splat_shark') drawSplatEffect(w, dt);
+    else if (w.state === 'boom_plane')  drawBoomEffect(w, dt);
+  });
+
   drawProjs();
   drawFx(dt);
+  drawTexts(dt);
+  drawBins();
+  drawDrag();
 
+  ctx.restore(); // undo shake
+
+  // HUD
   $('scoreVal').textContent = 'SCORE: ' + G.score;
+  $('levelVal').textContent = 'LV ' + G.level;
+  $('comboVal').textContent = G.combo > 1 ? 'COMBO x' + G.combo : '';
+  $('speedVal').textContent = '\u25B6 DEPTH ' + ((BASE_WALL_SPEED + (G.level - 1) * SPEED_RAMP) * 0.2).toFixed(0) + '%/s';
   $('livesVal').textContent = 'LIVES: ' + G.lives;
 
+  // Game over
   if (G.lives <= 0) {
     G.running = false;
+    sfxGameOver();
+    const hi = getHighScore();
+    const isNew = G.score > hi;
+    if (isNew) setHighScore(G.score);
     $('goTitle').style.display = 'block';
     $('goScore').style.display = 'block';
-    $('goScore').textContent = 'Final score: ' + G.score;
+    let goText = 'Score: ' + G.score + '  |  Level: ' + G.level + '  |  Best combo: ' + G.bestCombo;
+    goText += '\nHigh score: ' + (isNew ? G.score : hi) + (isNew ? '  NEW!' : '');
+    $('goScore').textContent = goText;
     $('restartBtn').style.display = 'inline-block';
     $('hud').style.display = 'none';
-    $('controls').style.display = 'none';
-    $('hint').style.display = 'none';
-    drawBg();
     return;
   }
 
   requestAnimationFrame(loop);
 }
 
+// ─── Start / restart ────────────────────────────────────────────
 function startGame() {
   $('overlay').classList.add('hidden');
   $('goTitle').style.display = 'none';
   $('goScore').style.display = 'none';
   $('restartBtn').style.display = 'none';
   $('hud').style.display = 'flex';
-  $('controls').style.display = 'block';
-  $('hint').style.display = 'block';
-  G.score = 0; G.lives = 3; G.wall = null; G.projs = []; G.fx = [];
-  G.wallCooldown = 0.5; G.pendingWall = false; G.grace = 0.3;
+  G.score = 0; G.lives = MAX_LIVES; G.level = 1; G.combo = 0; G.bestCombo = 0;
+  G.walls = []; G.projs = []; G.fx = []; G.texts = [];
+ ENV_PARTICLES.length = 0;
+  G.wallTimer = 0.6; G.levelFlash = 0;
+  G.shakeX = 0; G.shakeY = 0; G.shakeTime = 0;
+  G.gameTime = 0;
   G.running = true;
   lt = performance.now();
   requestAnimationFrame(loop);
@@ -294,44 +1537,29 @@ function startGame() {
 $('startBtn').addEventListener('click', startGame);
 $('restartBtn').addEventListener('click', startGame);
 
-$('sharkCtrl').addEventListener('pointerdown', e => { e.preventDefault(); fire('shark'); });
-$('planeCtrl').addEventListener('pointerdown', e => { e.preventDefault(); fire('plane'); });
+// Show high score on start screen
+(function showHi() { $('hiScore').textContent = 'HIGH SCORE: ' + getHighScore(); })();
 
-let swipeX = 0, swipeY = 0, swiping = false;
-document.addEventListener('pointerdown', e => {
-  if (e.target.closest('.ctrl') || e.target.closest('.btn')) return;
-  swipeX = e.clientX; swipeY = e.clientY; swiping = true;
-});
-document.addEventListener('pointerup', e => {
-  if (!swiping || !G.running) { swiping = false; return; }
-  swiping = false;
-  const dx = e.clientX - swipeX;
-  const dy = e.clientY - swipeY;
-  if (Math.abs(dx) > 25 && Math.abs(dx) > Math.abs(dy)*0.6) {
-    fire(dx < 0 ? 'shark' : 'plane');
+// ─── Pause on blur ─────────────────────────────────────────────
+window.addEventListener('blur', () => { G.paused = G.running; G.running = false; });
+window.addEventListener('focus', () => {
+  if (G.paused && G.lives > 0) {
+    G.running = true; G.paused = false;
+    lt = performance.now();
+    requestAnimationFrame(loop);
   }
 });
 
-document.addEventListener('keydown', e => {
-  if (!G.running) return;
-  if (e.key==='ArrowLeft'||e.key==='a') fire('shark');
-  if (e.key==='ArrowRight'||e.key==='d') fire('plane');
-});
-
-window.addEventListener('blur', () => { G.paused = G.running; G.running = false; });
-window.addEventListener('focus', () => { if (G.paused && G.lives > 0) { G.running = true; G.paused = false; lt=performance.now(); requestAnimationFrame(loop); }});
-
 (function drawPause() {
   if (G.paused) {
-    ctx.fillStyle='#0a0a0f'; ctx.fillRect(0,0,W,H);
-    ctx.strokeStyle='#13131f'; ctx.lineWidth=1;
-    for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-    for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-    if(G.wall) drawWall(G.wall);
-    drawProjs();
-    ctx.fillStyle='rgba(0,0,0,.45)'; ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='#fff'; ctx.font='bold '+Math.max(16,W*0.06)+'px "Courier New",monospace';
-    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('PAUSED',W/2,H/2);
+    drawBg();
+    G.walls.forEach(w => { if (w.state === 'advancing') drawWallBody(w, 0); });
+    drawBins();
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${Math.max(18, W * 0.06)}px "Courier New",monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('PAUSED', W / 2, H / 2);
   }
   requestAnimationFrame(drawPause);
 })();
