@@ -719,44 +719,42 @@ function drawWallBody(w, offsetY) {
     const imgW = cutW;
     const imgH = cutW * (img.naturalHeight / img.naturalWidth);
 
-    // Draw panel onto offscreen canvas, then punch hole with destination-out
-    ensureOSC(panelW + 4, panelH + 4);
+    // Draw panel onto offscreen canvas at (0,0), then punch hole, then blit to main canvas
+    ensureOSC(panelW, panelH);
     wallOCtx.clearRect(0, 0, wallOSC.width, wallOSC.height);
     wallOCtx.save();
-    wallOCtx.translate(2, 2); // offset for the 2px buffer
 
-    // Draw the panel body
-    const grad = wallOCtx.createLinearGradient(panelX, y, panelX, y + scaledH);
+    // Draw the panel body (all coords offset so 0,0 = panelX,panelY)
+    const grad = wallOCtx.createLinearGradient(0, 0, 0, panelH);
     grad.addColorStop(0, theme.wallColor1);
     grad.addColorStop(0.25, theme.wallColor2);
     grad.addColorStop(0.5, theme.wallColor3);
     grad.addColorStop(0.75, theme.wallColor2);
     grad.addColorStop(1, theme.wallColor1);
     wallOCtx.fillStyle = grad;
-    wallOCtx.fillRect(panelX, y, panelW, scaledH);
+    wallOCtx.fillRect(0, 0, panelW, panelH);
 
     // Rivet lines
     wallOCtx.strokeStyle = 'rgba(100,100,130,0.25)';
     wallOCtx.lineWidth = 1;
-    for (let rx = panelX; rx < panelX + panelW; rx += 40) {
-      wallOCtx.beginPath(); wallOCtx.moveTo(rx, y); wallOCtx.lineTo(rx, y + scaledH); wallOCtx.stroke();
+    for (let rx = 0; rx < panelW; rx += 40) {
+      wallOCtx.beginPath(); wallOCtx.moveTo(rx, 0); wallOCtx.lineTo(rx, panelH); wallOCtx.stroke();
     }
     wallOCtx.strokeStyle = 'rgba(100,100,130,0.12)';
     wallOCtx.beginPath();
-    wallOCtx.moveTo(panelX, y + scaledH * 0.3); wallOCtx.lineTo(panelX + panelW, y + scaledH * 0.3);
-    wallOCtx.moveTo(panelX, y + scaledH * 0.7); wallOCtx.lineTo(panelX + panelW, y + scaledH * 0.7);
+    wallOCtx.moveTo(0, panelH * 0.3); wallOCtx.lineTo(panelW, panelH * 0.3);
+    wallOCtx.moveTo(0, panelH * 0.7); wallOCtx.lineTo(panelW, panelH * 0.7);
     wallOCtx.stroke();
 
     // Punch the cutout hole using destination-out compositing
+    // Image centered at (panelW/2, panelH/2) relative to panel top-left
     wallOCtx.globalCompositeOperation = 'destination-out';
-    wallOCtx.drawImage(img, cutCX - imgW / 2, cutCY - imgH / 2, imgW, imgH);
+    wallOCtx.drawImage(img, panelW / 2 - imgW / 2, panelH / 2 - imgH / 2, imgW, imgH);
     wallOCtx.globalCompositeOperation = 'source-over';
     wallOCtx.restore();
 
-    // Draw offscreen canvas onto main canvas
-    ctx.save();
-    ctx.drawImage(wallOSC, 0, 0, wallOSC.width, wallOSC.height, panelX - 2, panelY - 2, panelW + 4, panelH + 4);
-    ctx.restore();
+    // Blit offscreen canvas onto main canvas at panel position
+    ctx.drawImage(wallOSC, 0, 0, panelW, panelH, panelX, panelY, panelW, panelH);
   } else {
     // Fallback: old evenodd path clip (if images haven't loaded yet)
     ctx.save();
