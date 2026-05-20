@@ -259,7 +259,10 @@ const G = {
   // Level flash
   levelFlash: 0,
   // Time
-  gameTime: 0,
+	gameTime: 0,
+	jawsInterval: null,
+  jawsTempo: 2000,
+  flingLines: [],
 };
 
 function damageLifePip() {
@@ -270,8 +273,52 @@ function damageLifePip() {
     if (bestIdx >= 0 && bestVal > 0.01) G.lifePips[bestIdx] = 0;
 }
 function allPipsDead() {
-    return G.lifePips.every(p => p <= 0.01);
+	return G.lifePips.every(p => p <= 0.01);
 }
+
+let jawsToggle = false;
+function updateJawsDrone() {
+	const damaged = G.lifePips.filter(p => p < 0.5).length;
+	if (damaged >= 6 && !G.jawsInterval) {
+		jawsToggle = false;
+		G.jawsTempo = 2000 - (damaged - 6) * 200;
+		if (G.jawsTempo < 400) G.jawsTempo = 400;
+		G.jawsInterval = setInterval(() => {
+			if (!G.running) { clearInterval(G.jawsInterval); G.jawsInterval = null; return; }
+			jawsToggle = !jawsToggle;
+			playTone(jawsToggle ? 82 : 87, 0.35, 'sawtooth', 0.06);
+		}, G.jawsTempo);
+	} else if (damaged >= 6 && G.jawsInterval) {
+		const newTempo = 2000 - (damaged - 6) * 200;
+		if (newTempo < 400) newTempo = 400;
+		if (Math.abs(newTempo - G.jawsTempo) > 100) {
+			clearInterval(G.jawsInterval);
+			G.jawsTempo = newTempo;
+			G.jawsInterval = setInterval(() => {
+				if (!G.running) { clearInterval(G.jawsInterval); G.jawsInterval = null; return; }
+				jawsToggle = !jawsToggle;
+				playTone(jawsToggle ? 82 : 87, 0.35, 'sawtooth', 0.06);
+			}, G.jawsTempo);
+		}
+	} else if (damaged < 4 && G.jawsInterval) {
+		clearInterval(G.jawsInterval);
+		G.jawsInterval = null;
+	}
+}
+
+function drawDangerOverlay() {
+	const damaged = G.lifePips.filter(p => p < 0.5).length;
+	if (damaged < 5) return;
+	const intensity = Math.min(1, (damaged - 5) / 5);
+	const pulse = 0.6 + 0.4 * Math.sin(G.gameTime * (3 + intensity * 4));
+	const alpha = intensity * pulse * 0.35;
+	const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.75);
+	grad.addColorStop(0, 'rgba(255,0,0,0)');
+	grad.addColorStop(1, `rgba(255,0,0,${alpha})`);
+	ctx.fillStyle = grad;
+	ctx.fillRect(0, 0, W, H);
+}
+
 function drawLifePips() {
     const pipR = Math.min(W * 0.018, 10);
     const gap = pipR * 2.8;
@@ -895,6 +942,7 @@ function fireProjectile(type, fromX, fromY, vx, vy) {
   if (!G.running || G.projs.length > 0) return;
   sfxFling();
   G.projs.push({ type, x: fromX, y: fromY, vx, vy, size: 55, alive: true, rot: 0 });
+  spawnFlingLines(fromX, fromY, vx, vy);
 }
 
 // ─── Input: drag & fling ────────────────────────────────────────
@@ -1229,6 +1277,83 @@ function drawProjs() {
   });
 }
 
+// ─── Fling speed lines ──────────────────────────────────────────
+function spawnFlingLines(x, y, vx, vy) {
+  const speed = Math.sqrt(vx * vx + vy * vy);
+  const baseAngle = Math.atan2(vy, vx);
+  const count = 5 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < count; i++) {
+    const spread = (Math.random() - 0.5) * 0.8;
+    const lineLen = 18 + Math.random() * 20;
+    G.flingLines.push({
+      x: x + (Math.random() - 0.5) * 14,
+      y: y + (Math.random() - 0.5) * 14,
+      angle: baseAngle + spread,
+      len: lineLen,
+      life: 0.25 + Math.random() * 0.15,
+      maxLife: 0.25 + Math.random() * 0.15,
+    });
+  }
+}
+
+function drawFlingLines(dt) {
+  for (let i = G.flingLines.length - 1; i >= 0; i--) {
+    const l = G.flingLines[i];
+    l.life -= dt;
+    if (l.life <= 0) { G.flingLines.splice(i, 1); continue; }
+    const alpha = (l.life / l.maxLife) * 0.7;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(l.x, l.y);
+    ctx.lineTo(l.x + Math.cos(l.angle) * l.len, l.y + Math.sin(l.angle) * l.len);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─── Combo hype ──────────────────────────────────────────────────
+function drawComboHype() {
+  if (G.combo < 3) return;
+  const intensity = Math.min(1, (G.combo - 3) / 10);
+  const pulse = 0.5 + 0.5 * Math.sin(G.gameTime * 6);
+
+  // Screen edge glow
+  const glowAlpha = (0.08 + 0.12 * intensity) * (0.6 + 0.4 * pulse);
+  const hot = G.combo >= 8;
+  const edgeGrad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+  edgeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  if (hot) {
+    edgeGrad.addColorStop(0.6, `rgba(255,200,50,${glowAlpha * 0.3})`);
+    edgeGrad.addColorStop(1, `rgba(255,255,200,${glowAlpha})`);
+  } else {
+    edgeGrad.addColorStop(0.6, `rgba(255,170,0,${glowAlpha * 0.3})`);
+    edgeGrad.addColorStop(1, `rgba(255,170,0,${glowAlpha})`);
+  }
+  ctx.fillStyle = edgeGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Floating combo text
+  if (G.combo >= 5) {
+    let label;
+    if (G.combo >= 10) label = '\uD83D\uDD25 UNSTOPPABLE! \uD83D\uDD25';
+    else if (G.combo >= 7) label = 'ON FIRE!';
+    else label = 'NICE STREAK!';
+    const textAlpha = (0.5 + 0.5 * pulse) * Math.min(1, intensity + 0.3);
+    ctx.save();
+    ctx.globalAlpha = textAlpha;
+    ctx.fillStyle = hot ? '#fff8e0' : '#ffd54f';
+    ctx.font = `bold ${28 + Math.floor(intensity * 8)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = hot ? '#ff8800' : '#ffaa00';
+    ctx.shadowBlur = 12 + intensity * 10;
+    ctx.fillText(label, W / 2, 70);
+    ctx.restore();
+  }
+}
+
 // ─── Particle rendering ─────────────────────────────────────────
 function drawFx(dt) {
   G.fx.forEach(e => {
@@ -1495,10 +1620,13 @@ function loop(ts) {
 
   // Regenerate life pips
 for (let i = 0; i < G.lifePips.length; i++) {
-    if (G.lifePips[i] < 1.0) G.lifePips[i] = Math.min(1.0, G.lifePips[i] + LIFE_REGEN_RATE * dt);
-}
+	if (G.lifePips[i] < 1.0) G.lifePips[i] = Math.min(1.0, G.lifePips[i] + LIFE_REGEN_RATE * dt);
+	}
 
-// Move advancing walls
+	// Jaws-style escalating drone
+	updateJawsDrone();
+
+	// Move advancing walls
   const wallSpeed = BASE_WALL_SPEED + (G.level - 1) * SPEED_RAMP;
   G.walls.forEach(w => {
     if (w.state === 'advancing') {
@@ -1552,15 +1680,19 @@ for (let i = 0; i < G.lifePips.length; i++) {
   });
 
   drawProjs();
+  drawFlingLines(dt);
   drawFx(dt);
   drawTexts(dt);
   drawBins();
   drawDrag();
-drawLifePips();
+  drawLifePips();
+  drawComboHype();
 
-  ctx.restore(); // undo shake
+	ctx.restore(); // undo shake
 
-  // HUD
+	drawDangerOverlay();
+
+	// HUD
   $('scoreVal').textContent = 'SCORE: ' + G.score;
   $('levelVal').textContent = 'LV ' + G.level;
   $('comboVal').textContent = G.combo > 1 ? 'COMBO x' + G.combo : '';
@@ -1568,8 +1700,9 @@ $('speedVal').textContent = '\u25B6 DEPTH ' + ((BASE_WALL_SPEED + (G.level - 1) 
 G.lives = G.lifePips.filter(p => p > 0.01).length;
 
   // Game over
-  if (allPipsDead()) {
-    G.running = false;
+	if (allPipsDead()) {
+		if (G.jawsInterval) { clearInterval(G.jawsInterval); G.jawsInterval = null; }
+		G.running = false;
     sfxGameOver();
     const hi = getHighScore();
     const isNew = G.score > hi;
@@ -1596,12 +1729,14 @@ function startGame() {
   $('hud').style.display = 'flex';
   G.score = 0; G.lives = MAX_LIVES; G.level = 1; G.combo = 0; G.bestCombo = 0;
     G.lifePips = new Array(MAX_LIVES).fill(1.0);
-  G.walls = []; G.projs = []; G.fx = []; G.texts = [];
+  G.walls = []; G.projs = []; G.fx = []; G.texts = []; G.flingLines = [];
  ENV_PARTICLES.length = 0;
   G.wallTimer = 0.6; G.levelFlash = 0;
   G.shakeX = 0; G.shakeY = 0; G.shakeTime = 0;
-  G.gameTime = 0;
-  G.running = true;
+	G.gameTime = 0;
+	if (G.jawsInterval) { clearInterval(G.jawsInterval); G.jawsInterval = null; }
+	G.jawsTempo = 2000;
+	G.running = true;
   lt = performance.now();
   requestAnimationFrame(loop);
 }
