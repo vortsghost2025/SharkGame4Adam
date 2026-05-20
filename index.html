@@ -818,12 +818,12 @@ function drawWallBody(w, offsetY) {
   ].forEach(([bx, by]) => { ctx.beginPath(); ctx.arc(bx, by, boltR, 0, Math.PI * 2); ctx.fill(); });
   ctx.restore();
 
-  // Ghost silhouette in the hole (faint) — shows the hybrid creature for combo types
+  // Ghost silhouette in the hole — bright guide showing what shape fits
   ctx.save();
-  ctx.globalAlpha = 0.12;
-  if (w.type === 'shame') drawShame(cutCX, cutCY, cutW * 0.8, 0.12);
-  else if (w.type === 'plark') drawPlark(cutCX, cutCY, cutW * 0.8, 0.12);
-  else drawShape(shape, cutCX, cutCY, cutW * 0.8, 0.12, theme.accent);
+  ctx.globalAlpha = 0.45;
+  if (w.type === 'shame') drawShame(cutCX, cutCY, cutW, 0.45);
+  else if (w.type === 'plark') drawPlark(cutCX, cutCY, cutW, 0.45);
+  else drawShape(shape, cutCX, cutCY, cutW, 0.45, theme.accent);
   ctx.restore();
 
   // Glowing cutout border — draw the image silhouette with glow shadow on offscreen canvas
