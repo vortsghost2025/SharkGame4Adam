@@ -65,6 +65,17 @@ const canvas = $('c');
 const ctx = canvas.getContext('2d');
 let W, H, dpr;
 
+// Offscreen canvas for wall cutout compositing
+let wallOSC, wallOCtx;
+function ensureOSC(w, h) {
+  if (!wallOSC || wallOSC.width < w || wallOSC.height < h) {
+    wallOSC = document.createElement('canvas');
+    wallOSC.width = Math.ceil(w) + 4;
+    wallOSC.height = Math.ceil(h) + 4;
+    wallOCtx = wallOSC.getContext('2d');
+  }
+}
+
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth; H = window.innerHeight;
@@ -684,7 +695,6 @@ function wallScreenY(w) {
 
 function drawWallBody(w, offsetY) {
   offsetY = offsetY || 0;
-  // Depth-based perspective: depth 0 = far/small, depth 2.0 = near/large (shooting range target coming at you)
   const { y: baseY, scale, scaledH } = wallScreenY(w);
   const y = baseY + offsetY;
   const shape = w.shape;
@@ -694,100 +704,112 @@ function drawWallBody(w, offsetY) {
   const theme = getTheme(G.level - 1);
 
   // Target panel dimensions (shooting range style — square-ish board)
-  const panelPadX = cutW * 0.55; // padding around cutout
-  const panelPadY = scaledH * 0.25;
+  const panelPadX = cutW * 0.55;
   const panelX = cutCX - cutW / 2 - panelPadX;
   const panelW = cutW + panelPadX * 2;
   const panelY = y;
   const panelH = scaledH;
 
-  // Fill target panel with cutout using evenodd clipping
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(panelX, panelY, panelW, panelH); // outer = panel shape
+  // ── Panel with image-based cutout using offscreen compositing ──
+  const img = shape === 'shark' ? SHARK_IMG : PLANE_IMG;
+  const imgLoaded = shape === 'shark' ? sharkImgLoaded : planeImgLoaded;
 
-  // Inner shape hole — trace reversed for evenodd
-  ctx.save();
-  ctx.translate(cutCX, cutCY);
-  const sc = -cutW / 100; // negative scale = reversed winding
-  ctx.scale(sc, sc);
-  ctx.beginPath();
-if (shape === 'shark') {
-ctx.moveTo(-46, -8);
-ctx.lineTo(-38, -20);
-ctx.lineTo(-18, -12);
-ctx.lineTo(-10, -8);
-ctx.lineTo(-4, -30);
-ctx.lineTo(2, -8);
-ctx.lineTo(20, -6);
-ctx.lineTo(44, 0);
-ctx.lineTo(20, 6);
-ctx.lineTo(14, 8);
-ctx.lineTo(8, 22);
-ctx.lineTo(4, 8);
-ctx.lineTo(-18, 10);
-ctx.lineTo(-38, 20);
-ctx.lineTo(-46, 8);
-ctx.closePath();
-} else {
-ctx.moveTo(44, 0);
-ctx.lineTo(20, -3);
-ctx.lineTo(12, -7);
-ctx.lineTo(4, -5);
-ctx.lineTo(-14, -34);
-ctx.lineTo(-10, -6);
-ctx.lineTo(-28, -5);
-ctx.lineTo(-36, -22);
-ctx.lineTo(-38, -5);
-ctx.lineTo(-44, -2);
-ctx.lineTo(-44, 2);
-ctx.lineTo(-38, 5);
-ctx.lineTo(-28, 5);
-ctx.lineTo(-10, 6);
-ctx.lineTo(-14, 34);
-ctx.lineTo(4, 5);
-ctx.lineTo(12, 7);
-ctx.lineTo(20, 3);
-ctx.closePath();
-}
-ctx.restore();
+  if (imgLoaded) {
+    // Calculate cutout image dimensions (same aspect ratio as photo sprite)
+    const imgW = cutW;
+    const imgH = cutW * (img.naturalHeight / img.naturalWidth);
 
-ctx.clip('evenodd');
+    // Draw panel onto offscreen canvas, then punch hole with destination-out
+    ensureOSC(panelW + 4, panelH + 4);
+    wallOCtx.clearRect(0, 0, wallOSC.width, wallOSC.height);
+    wallOCtx.save();
+    wallOCtx.translate(2, 2); // offset for the 2px buffer
 
-  // Metallic panel gradient — theme-colored
-  const grad = ctx.createLinearGradient(panelX, y, panelX, y + scaledH);
-  grad.addColorStop(0, theme.wallColor1);
-  grad.addColorStop(0.25, theme.wallColor2);
-  grad.addColorStop(0.5, theme.wallColor3);
-  grad.addColorStop(0.75, theme.wallColor2);
-  grad.addColorStop(1, theme.wallColor1);
-  ctx.fillStyle = grad;
-  ctx.fillRect(panelX, y, panelW, scaledH);
+    // Draw the panel body
+    const grad = wallOCtx.createLinearGradient(panelX, y, panelX, y + scaledH);
+    grad.addColorStop(0, theme.wallColor1);
+    grad.addColorStop(0.25, theme.wallColor2);
+    grad.addColorStop(0.5, theme.wallColor3);
+    grad.addColorStop(0.75, theme.wallColor2);
+    grad.addColorStop(1, theme.wallColor1);
+    wallOCtx.fillStyle = grad;
+    wallOCtx.fillRect(panelX, y, panelW, scaledH);
 
-  // Rivet lines on panel
-  ctx.strokeStyle = 'rgba(100,100,130,0.25)';
-  ctx.lineWidth = 1;
-  for (let rx = panelX; rx < panelX + panelW; rx += 40) {
-    ctx.beginPath(); ctx.moveTo(rx, y); ctx.lineTo(rx, y + scaledH); ctx.stroke();
+    // Rivet lines
+    wallOCtx.strokeStyle = 'rgba(100,100,130,0.25)';
+    wallOCtx.lineWidth = 1;
+    for (let rx = panelX; rx < panelX + panelW; rx += 40) {
+      wallOCtx.beginPath(); wallOCtx.moveTo(rx, y); wallOCtx.lineTo(rx, y + scaledH); wallOCtx.stroke();
+    }
+    wallOCtx.strokeStyle = 'rgba(100,100,130,0.12)';
+    wallOCtx.beginPath();
+    wallOCtx.moveTo(panelX, y + scaledH * 0.3); wallOCtx.lineTo(panelX + panelW, y + scaledH * 0.3);
+    wallOCtx.moveTo(panelX, y + scaledH * 0.7); wallOCtx.lineTo(panelX + panelW, y + scaledH * 0.7);
+    wallOCtx.stroke();
+
+    // Punch the cutout hole using destination-out compositing
+    wallOCtx.globalCompositeOperation = 'destination-out';
+    wallOCtx.drawImage(img, cutCX - imgW / 2, cutCY - imgH / 2, imgW, imgH);
+    wallOCtx.globalCompositeOperation = 'source-over';
+    wallOCtx.restore();
+
+    // Draw offscreen canvas onto main canvas
+    ctx.save();
+    ctx.drawImage(wallOSC, 0, 0, wallOSC.width, wallOSC.height, panelX - 2, panelY - 2, panelW + 4, panelH + 4);
+    ctx.restore();
+  } else {
+    // Fallback: old evenodd path clip (if images haven't loaded yet)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(panelX, panelY, panelW, panelH);
+    ctx.save();
+    ctx.translate(cutCX, cutCY);
+    const sc = -cutW / 100;
+    ctx.scale(sc, sc);
+    ctx.beginPath();
+    if (shape === 'shark') {
+      ctx.moveTo(-46, -8); ctx.lineTo(-38, -20); ctx.lineTo(-18, -12); ctx.lineTo(-10, -8);
+      ctx.lineTo(-4, -30); ctx.lineTo(2, -8); ctx.lineTo(20, -6); ctx.lineTo(44, 0);
+      ctx.lineTo(20, 6); ctx.lineTo(14, 8); ctx.lineTo(8, 22); ctx.lineTo(4, 8);
+      ctx.lineTo(-18, 10); ctx.lineTo(-38, 20); ctx.lineTo(-46, 8); ctx.closePath();
+    } else {
+      ctx.moveTo(44, 0); ctx.lineTo(20, -3); ctx.lineTo(12, -7); ctx.lineTo(4, -5);
+      ctx.lineTo(-14, -34); ctx.lineTo(-10, -6); ctx.lineTo(-28, -5); ctx.lineTo(-36, -22);
+      ctx.lineTo(-38, -5); ctx.lineTo(-44, -2); ctx.lineTo(-44, 2); ctx.lineTo(-38, 5);
+      ctx.lineTo(-28, 5); ctx.lineTo(-10, 6); ctx.lineTo(-14, 34); ctx.lineTo(4, 5);
+      ctx.lineTo(12, 7); ctx.lineTo(20, 3); ctx.closePath();
+    }
+    ctx.restore();
+    ctx.clip('evenodd');
+    const grad = ctx.createLinearGradient(panelX, y, panelX, y + scaledH);
+    grad.addColorStop(0, theme.wallColor1);
+    grad.addColorStop(0.25, theme.wallColor2);
+    grad.addColorStop(0.5, theme.wallColor3);
+    grad.addColorStop(0.75, theme.wallColor2);
+    grad.addColorStop(1, theme.wallColor1);
+    ctx.fillStyle = grad;
+    ctx.fillRect(panelX, y, panelW, scaledH);
+    ctx.strokeStyle = 'rgba(100,100,130,0.25)';
+    ctx.lineWidth = 1;
+    for (let rx = panelX; rx < panelX + panelW; rx += 40) {
+      ctx.beginPath(); ctx.moveTo(rx, y); ctx.lineTo(rx, y + scaledH); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(100,100,130,0.12)';
+    ctx.beginPath();
+    ctx.moveTo(panelX, y + scaledH * 0.3); ctx.lineTo(panelX + panelW, y + scaledH * 0.3);
+    ctx.moveTo(panelX, y + scaledH * 0.7); ctx.lineTo(panelX + panelW, y + scaledH * 0.7);
+    ctx.stroke();
+    ctx.restore();
   }
-  // Horizontal details
-  ctx.strokeStyle = 'rgba(100,100,130,0.12)';
-  ctx.beginPath();
-  ctx.moveTo(panelX, y + scaledH * 0.3); ctx.lineTo(panelX + panelW, y + scaledH * 0.3);
-  ctx.moveTo(panelX, y + scaledH * 0.7); ctx.lineTo(panelX + panelW, y + scaledH * 0.7);
-  ctx.stroke();
-  ctx.restore();
 
   // Target panel border (shooting range style frame)
   ctx.save();
   ctx.strokeStyle = 'rgba(200,200,220,0.5)';
   ctx.lineWidth = Math.max(2, 3 * scale);
   ctx.strokeRect(panelX, panelY, panelW, panelH);
-  // Inner border highlight
   ctx.strokeStyle = 'rgba(255,255,255,0.1)';
   ctx.lineWidth = Math.max(1, 1.5 * scale);
   ctx.strokeRect(panelX + 2, panelY + 2, panelW - 4, panelH - 4);
-  // Corner bolts (shooting range target feel)
   const boltR = Math.max(2, 4 * scale);
   const boltOff = Math.max(6, 10 * scale);
   ctx.fillStyle = 'rgba(180,180,200,0.6)';
@@ -804,57 +826,58 @@ ctx.clip('evenodd');
   else drawShape(shape, cutCX, cutCY, cutW * 0.8, 0.12, theme.accent);
   ctx.restore();
 
-  // Glowing cutout border
-  ctx.save();
-  ctx.globalAlpha = 0.55;
-  ctx.strokeStyle = theme.accent;
-  ctx.lineWidth = 2.5;
-  ctx.shadowColor = theme.accent;
-  ctx.shadowBlur = 12;
-  ctx.translate(cutCX, cutCY);
-  const bs = cutW / 100;
-  ctx.scale(bs, bs);
-  ctx.beginPath();
-if (shape === 'shark') {
-ctx.moveTo(-46, -8);
-ctx.lineTo(-38, -20);
-ctx.lineTo(-18, -12);
-ctx.lineTo(-10, -8);
-ctx.lineTo(-4, -30);
-ctx.lineTo(2, -8);
-ctx.lineTo(20, -6);
-ctx.lineTo(44, 0);
-ctx.lineTo(20, 6);
-ctx.lineTo(14, 8);
-ctx.lineTo(8, 22);
-ctx.lineTo(4, 8);
-ctx.lineTo(-18, 10);
-ctx.lineTo(-38, 20);
-ctx.lineTo(-46, 8);
-ctx.closePath();
-} else {
-ctx.moveTo(44, 0);
-ctx.lineTo(20, -3);
-ctx.lineTo(12, -7);
-ctx.lineTo(4, -5);
-ctx.lineTo(-14, -34);
-ctx.lineTo(-10, -6);
-ctx.lineTo(-28, -5);
-ctx.lineTo(-36, -22);
-ctx.lineTo(-38, -5);
-ctx.lineTo(-44, -2);
-ctx.lineTo(-44, 2);
-ctx.lineTo(-38, 5);
-ctx.lineTo(-28, 5);
-ctx.lineTo(-10, 6);
-ctx.lineTo(-14, 34);
-ctx.lineTo(4, 5);
-ctx.lineTo(12, 7);
-ctx.lineTo(20, 3);
-ctx.closePath();
-}
-ctx.stroke();
-  ctx.restore();
+  // Glowing cutout border — draw the image silhouette with glow shadow on offscreen canvas
+  if (imgLoaded) {
+    const imgW = cutW;
+    const imgH = cutW * (img.naturalHeight / img.naturalWidth);
+    // Use offscreen canvas for compositing safety
+    ensureOSC(imgW + 32, imgH + 32);
+    wallOCtx.clearRect(0, 0, wallOSC.width, wallOSC.height);
+    wallOCtx.save();
+    wallOCtx.globalAlpha = 0.55;
+    wallOCtx.shadowColor = theme.accent;
+    wallOCtx.shadowBlur = 12;
+    // Draw image with shadow → shadow creates the glow outline
+    wallOCtx.drawImage(img, (wallOSC.width - imgW) / 2, (wallOSC.height - imgH) / 2, imgW, imgH);
+    // Erase the interior image, leaving only the glow shadow halo
+    wallOCtx.globalCompositeOperation = 'destination-out';
+    wallOCtx.shadowColor = 'transparent';
+    wallOCtx.shadowBlur = 0;
+    wallOCtx.drawImage(img, (wallOSC.width - imgW) / 2, (wallOSC.height - imgH) / 2, imgW, imgH);
+    wallOCtx.restore();
+    // Blit glow onto main canvas centered on cutout
+    ctx.drawImage(wallOSC,
+      0, 0, wallOSC.width, wallOSC.height,
+      cutCX - wallOSC.width / 2, cutCY - wallOSC.height / 2,
+      wallOSC.width, wallOSC.height
+    );
+  } else {
+    // Fallback: old path-based glow border
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = theme.accent;
+    ctx.shadowBlur = 12;
+    ctx.translate(cutCX, cutCY);
+    const bs = cutW / 100;
+    ctx.scale(bs, bs);
+    ctx.beginPath();
+    if (shape === 'shark') {
+      ctx.moveTo(-46, -8); ctx.lineTo(-38, -20); ctx.lineTo(-18, -12); ctx.lineTo(-10, -8);
+      ctx.lineTo(-4, -30); ctx.lineTo(2, -8); ctx.lineTo(20, -6); ctx.lineTo(44, 0);
+      ctx.lineTo(20, 6); ctx.lineTo(14, 8); ctx.lineTo(8, 22); ctx.lineTo(4, 8);
+      ctx.lineTo(-18, 10); ctx.lineTo(-38, 20); ctx.lineTo(-46, 8); ctx.closePath();
+    } else {
+      ctx.moveTo(44, 0); ctx.lineTo(20, -3); ctx.lineTo(12, -7); ctx.lineTo(4, -5);
+      ctx.lineTo(-14, -34); ctx.lineTo(-10, -6); ctx.lineTo(-28, -5); ctx.lineTo(-36, -22);
+      ctx.lineTo(-38, -5); ctx.lineTo(-44, -2); ctx.lineTo(-44, 2); ctx.lineTo(-38, 5);
+      ctx.lineTo(-28, 5); ctx.lineTo(-10, 6); ctx.lineTo(-14, 34); ctx.lineTo(4, 5);
+      ctx.lineTo(12, 7); ctx.lineTo(20, 3); ctx.closePath();
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Combo-type hint labels
   if (w.type === 'shame' || w.type === 'plark') {
