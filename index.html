@@ -404,16 +404,16 @@ function requiredThrow(wt) {
 
 // ─── Shape drawing ──────────────────────────────────────────────
 // Shark shape — centered at (0,0), about ±45 units
-function drawShark(x, y, size, alpha, tint) {
-ctx.save();
-ctx.globalAlpha = alpha != null ? alpha : 1;
-if (sharkImgLoaded && !tint) {
-const w = size;
-const h = size * (SHARK_IMG.naturalHeight / SHARK_IMG.naturalWidth);
-ctx.drawImage(SHARK_IMG, x - w / 2, y - h / 2, w, h);
-ctx.restore();
-return;
-}
+function drawShark(x, y, size, alpha, tint, forcePath) {
+  ctx.save();
+  ctx.globalAlpha = alpha != null ? alpha : 1;
+  if (sharkImgLoaded && !tint && !forcePath) {
+    const w = size;
+    const h = size * (SHARK_IMG.naturalHeight / SHARK_IMG.naturalWidth);
+    ctx.drawImage(SHARK_IMG, x - w / 2, y - h / 2, w, h);
+    ctx.restore();
+    return;
+  }
 ctx.translate(x, y);
 const s = size / 100;
 ctx.scale(s, s);
@@ -472,10 +472,10 @@ const body = tint || '#1a8ccc';
 }
 
 // Plane shape — centered at (0,0), about ±45 units
-function drawPlane(x, y, size, alpha, tint) {
-ctx.save();
-ctx.globalAlpha = alpha != null ? alpha : 1;
-if (planeImgLoaded && !tint) {
+function drawPlane(x, y, size, alpha, tint, forcePath) {
+  ctx.save();
+  ctx.globalAlpha = alpha != null ? alpha : 1;
+  if (planeImgLoaded && !tint && !forcePath) {
 const w = size;
 const h = size * (PLANE_IMG.naturalHeight / PLANE_IMG.naturalWidth);
 ctx.drawImage(PLANE_IMG, x - w / 2, y - h / 2, w, h);
@@ -657,7 +657,7 @@ function drawBins() {
   for (let i = 0; i < 3; i++) {
     const ox = (i - 1) * sz * 0.5;
     const oy = i * 4;
-    drawShark(sr.x + sr.w / 2 + ox, sr.y + sr.h / 2 + oy + 12, sz, 0.25 + i * 0.18);
+      drawShark(sr.x + sr.w / 2 + ox, sr.y + sr.h / 2 + oy + 12, sz, 0.25 + i * 0.18, null, true);
   }
   ctx.restore();
 
@@ -677,7 +677,7 @@ function drawBins() {
   for (let i = 0; i < 3; i++) {
     const ox = (i - 1) * psz * 0.5;
     const oy = i * 4;
-    drawPlane(pr.x + pr.w / 2 + ox, pr.y + pr.h / 2 + oy + 12, psz, 0.25 + i * 0.18);
+      drawPlane(pr.x + pr.w / 2 + ox, pr.y + pr.h / 2 + oy + 12, psz, 0.25 + i * 0.18, null, true);
   }
   ctx.restore();
 }
