@@ -1826,8 +1826,8 @@ window.addEventListener('focus', () => {
     ctx.font = `bold ${Math.max(18, W * 0.06)}px "Courier New",monospace`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('PAUSED', W / 2, H / 2);
+    requestAnimationFrame(drawPause);
   }
-  requestAnimationFrame(drawPause);
 })();
 </script>
 </body>
