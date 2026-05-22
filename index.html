@@ -776,7 +776,7 @@ function drawWallBody(w, offsetY) {
     ctx.translate(cutCX, cutCY);
     const sc = -cutW / 100;
     ctx.scale(sc, sc);
-    ctx.beginPath();
+    // Don't call beginPath() - we need to add the shape to the existing path
     if (shape === 'shark') {
       ctx.moveTo(-46, -8); ctx.lineTo(-38, -20); ctx.lineTo(-18, -12); ctx.lineTo(-10, -8);
       ctx.lineTo(-4, -30); ctx.lineTo(2, -8); ctx.lineTo(20, -6); ctx.lineTo(44, 0);
@@ -976,8 +976,8 @@ function handleHit(proj, wall) {
     sfxPass();
     const label = bonus > 0 ? `+${1+bonus} COMBO x${G.combo}!` : '+1';
     addText(cx, cy - 30, label, '#0f0', bonus > 2);
-} else {
-        damageLifePip();
+  } else {
+    damageLifePip();
     G.combo = 0;
     shake(6, 0.3);
     if (proj.type === 'shark') {
