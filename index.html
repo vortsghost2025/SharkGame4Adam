@@ -20,7 +20,22 @@ canvas{display:block;width:100%;height:100%;position:fixed;top:0;left:0;z-index:
 #hud{position:fixed;top:0;left:0;width:100%;padding:clamp(8px,2vw,14px) clamp(12px,3vw,18px);display:flex;justify-content:space-between;z-index:10;pointer-events:none;font-size:clamp(12px,3vw,16px);font-weight:700;letter-spacing:1px}
 #scoreVal{color:#0f0}
 #levelVal{color:#0af}
-#comboVal{color:#ff0}
+  #comboVal{color:#ff0}
+  /* Tutorial overlay */
+  #tutorial{position:fixed;bottom:0;left:0;width:100%;z-index:25;display:flex;flex-direction:column;align-items:center;padding-bottom:clamp(14px,3.5vh,22px);pointer-events:none;transition:opacity .5s}
+  #tutorial span{font-size:clamp(13px,3.2vw,19px);font-weight:700;letter-spacing:3px;color:#fff;text-shadow:0 0 12px #0af,0 0 24px #0af;animation:tutPulse 1.2s ease-in-out infinite}
+  #tutorial small{font-size:clamp(9px,2vw,12px);opacity:.5;letter-spacing:1px;margin-top:2px}
+  @keyframes tutPulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
+  /* Level name plaque */
+  .level-plaque{position:fixed;top:-60px;left:50%;transform:translateX(-50%);z-index:22;padding:8px 28px;font-size:clamp(12px,3vw,18px);font-weight:900;letter-spacing:3px;color:#fff;pointer-events:none;transition:top .7s cubic-bezier(.34,1.56,.64,1);border:2px solid;border-left:none;border-right:none}
+  .level-plaque.show{top:clamp(50px,10vh,90px)}
+  /* Milestone banner */
+  #milestone{position:fixed;top:-80px;left:50%;transform:translateX(-50%);z-index:22;padding:10px 36px;font-size:clamp(16px,4vw,26px);font-weight:900;letter-spacing:4px;color:#fff;pointer-events:none;transition:top .5s cubic-bezier(.34,1.56,.64,1)}
+  #milestone.show{top:clamp(42px,9vh,80px)}
+  /* Glow text */
+  .glow-cyan{text-shadow:0 0 20px #0af,0 0 40px #0af,0 0 60px #0af}
+  .glow-gold{text-shadow:0 0 20px #fc0,0 0 40px #fc0,0 0 60px #fc0}
+  .glow-red{text-shadow:0 0 20px #f44,0 0 40px #f44,0 0 60px #f44}
 </style>
 </head>
 <body>
@@ -40,6 +55,18 @@ canvas{display:block;width:100%;height:100%;position:fixed;top:0;left:0;z-index:
 <div id="comboVal"></div>
 <div id="speedVal" style="color:#f80;font-size:clamp(10px,2.5vw,13px)"></div>
 </div>
+
+<!-- Tutorial -->
+<div id="tutorial" style="display:none">
+  <span>⬅ DRAG & FLING ⥊ ARROWS ➡</span>
+  <small>For Adam — drop the shark or plane</small>
+</div>
+
+<!-- Level plaque -->
+<div id="levelPlaque" class="level-plaque"></div>
+
+<!-- Milestone banner -->
+<div id="milestone"></div>
 
 <script>
 // ─── Shark sprite (from user's photo) ──────────────────────────
@@ -144,7 +171,7 @@ function sfxMiss() { playTone(200, 0.2, 'triangle', 0.1, 80); }
 
 // ─── Constants ──────────────────────────────────────────────────
 const BASE_WALL_SPEED  = 75;   // px/s at level 1
-const SPEED_RAMP       = 15;   // extra px/s per level
+const SPEED_RAMP = 5; // extra px/s per level
 const WALL_GAP         = 0.85; // seconds between walls
 const BIN_W_RATIO      = 0.38;
 const BIN_H            = 100;
@@ -170,7 +197,13 @@ const THEMES = [
     skyDraw:'volcano', sfxEnv:'volcano' },
 ];
 function getTheme(lv) { return THEMES[lv % THEMES.length]; }
-function getLevel(score) { return Math.floor(score / 8) + 1; }
+function getLevel(score) {
+  // Tight start — level up on 4/S, 8/2P, 12/3P, 20/4P, 28/5P, then slow ramp
+  if (score < 8)  return 1;
+  if (score < 16) return Math.floor(score / 4);
+  if (score < 44) return Math.floor(score / 3) - 1;
+  return Math.floor((score - 12) / 5) + 1;
+}
 
 // ─── Environmental particles ────────────────────────────────────
 const ENV_PARTICLES = [];
@@ -278,6 +311,75 @@ function drawEnvParticles() {
 function getHighScore() { return parseInt(localStorage.getItem('sharkVsPlane_hi') || '0', 10); }
 function setHighScore(s) { localStorage.setItem('sharkVsPlane_hi', s); }
 
+// ─── Tutorial overlay ──────────────────────────────────────────
+function showTutorial() {
+    if (localStorage.getItem('sharkVsPlane_tut')) return;
+    const el = $('tutorial');
+    el.style.display = 'flex';
+    el.style.opacity = '1';
+    function dismiss() {
+        el.style.opacity = '0';
+        setTimeout(() => { el.style.display = 'none'; }, 500);
+        localStorage.setItem('sharkVsPlane_tut', '1');
+        canvas.removeEventListener('pointerdown', dismiss);
+    }
+    canvas.addEventListener('pointerdown', dismiss);
+}
+
+// ─── Level name plaques ────────────────────────────────────────
+const LEVEL_NAMES = [
+    'TERRITORIAL WATERS', 'OPEN OCEAN', 'CORAL REEF', 'ARCTIC DRIFT',
+    'ABYSSAL ZONE', 'VOLCANIC VENT', 'SHIPWRECK ALLEY', 'MARIANA TRENCH'
+];
+let plaqueTimer = null;
+function showLevelPlaque(lv) {
+    const el = $('levelPlaque');
+    const name = LEVEL_NAMES[(lv - 1) % LEVEL_NAMES.length] || 'DEEPER';
+    const theme = getTheme(lv - 1);
+    el.textContent = 'LEVEL ' + lv + ': ' + name;
+    el.style.borderColor = theme.accent;
+    el.className = 'level-plaque glow-cyan show';
+    if (plaqueTimer) clearTimeout(plaqueTimer);
+    plaqueTimer = setTimeout(() => { el.className = 'level-plaque glow-cyan'; }, 2500);
+}
+
+// ─── Score milestone callouts ──────────────────────────────────
+const MILESTONES = [
+    [10, 'JUST WARMED UP', 'glow-cyan'],
+    [25, 'NICE STREAK', 'glow-cyan'],
+    [50, 'ON FIRE', 'glow-gold'],
+    [75, 'LEGENDARY', 'glow-gold'],
+    [100, 'SHARK GOD', 'glow-red']
+];
+let milestoneTimer = null;
+function checkMilestone() {
+    for (const [thresh, label, cls] of MILESTONES) {
+        if (G.score >= thresh && (G.lastMilestone || 0) < thresh) {
+            G.lastMilestone = thresh;
+            const el = $('milestone');
+            el.textContent = label;
+            el.className = cls + ' show';
+            if (milestoneTimer) clearTimeout(milestoneTimer);
+            milestoneTimer = setTimeout(() => { el.className = cls; }, 2000);
+            return;
+        }
+    }
+}
+
+// ─── Game over taunts ──────────────────────────────────────────
+function getTaunt(score) {
+    const hi = getHighScore();
+    if (score === 0) return 'SLEPT THROUGH CLASS?';
+    if (score < 5) return 'EVEN YOUR STUDENTS DO BETTER.';
+    if (score < 15) return 'SEE ME AFTER CLASS.';
+    if (score < 30) return 'NOT EXACTLY HONOR ROLL.';
+    if (score < 50) return 'SOLID B-minus EFFORT.';
+    if (score < 75) return "PRINCIPAL'S LIST MATERIAL!";
+    if (score < 100) return 'VALEDICTORIAN STATUS!';
+    if (score >= hi && hi > 0) return 'NEW BEST? TEACHER APPROVED.';
+    return 'EXTRA CREDIT EARNED.';
+}
+
 // ─── Game state ─────────────────────────────────────────────────
 const G = {
   score: 0, lives: MAX_LIVES, level: 1, combo: 0, bestCombo: 0,
@@ -296,8 +398,14 @@ const G = {
   // Time
 	gameTime: 0,
 	jawsInterval: null,
-  jawsTempo: 2000,
-  flingLines: [],
+    jawsTempo: 2000,
+    flingLines: [],
+    lastMilestone: 0,
+    countdown: 0,
+    _lastCount: -1,
+    binHover: null,
+    themeFade: 0,
+    _prevThemeBg: '#040c1a',
 };
 
 function damageLifePip() {
@@ -612,20 +720,20 @@ function drawShape(type, x, y, size, alpha, tint) {
 
 // ─── Wall spawning ──────────────────────────────────────────────
 function spawnWall() {
-  const type = randomWallType();
-  const shape = cutoutShape(type);
-  const cutW = Math.min(150, W * 0.36);
-  const cutH = cutW * 0.55;
-  const wallH = cutH + 36;
-  const margin = cutW / 2 + 30;
-  const cx = margin + Math.random() * Math.max(1, W - margin * 2);
-  G.walls.push({
-    type, shape,
-    y: 0, depth: 0, // Start far away (0 = distant, approaches 2.0 = in your face)
-    cx, cutX: cx - cutW / 2, cutW, cutH, h: wallH,
-    state: 'advancing',
-    timer: 0,
-  });
+    const type = randomWallType();
+    const shape = cutoutShape(type);
+    const cutW = Math.min(170, W * 0.40);
+    const cutH = cutW * 1.1;
+    const wallH = H * 0.65;
+    const margin = cutW / 2 + 30;
+    const cx = margin + Math.random() * Math.max(1, W - margin * 2);
+    G.walls.push({
+        type, shape,
+        y: 0, depth: 0,
+        cx, cutX: cx - cutW / 2, cutW, cutH, h: wallH,
+        state: 'advancing',
+        timer: 0,
+    });
 }
 
 // ─── Bins ───────────────────────────────────────────────────────
@@ -651,8 +759,15 @@ function roundRect(x, y, w, h, r) {
 }
 
 function drawBins() {
-  // Shark bin (left)
+  // Shark bin (left) — hover glow
   const sr = binRect('shark');
+  if (G.binHover === 'shark') {
+    ctx.save();
+    ctx.shadowColor = '#0af'; ctx.shadowBlur = 20;
+    ctx.strokeStyle = 'rgba(26,140,204,0.7)'; ctx.lineWidth = 3;
+    roundRect(sr.x + 6, sr.y, sr.w - 12, sr.h, 14); ctx.stroke();
+    ctx.restore();
+  }
   ctx.save();
   ctx.fillStyle = 'rgba(10,60,100,0.2)';
   ctx.strokeStyle = 'rgba(26,140,204,0.35)';
@@ -673,8 +788,15 @@ function drawBins() {
   }
   ctx.restore();
 
-  // Plane bin (right)
+  // Plane bin (right) — hover glow
   const pr = binRect('plane');
+  if (G.binHover === 'plane') {
+    ctx.save();
+    ctx.shadowColor = '#fa0'; ctx.shadowBlur = 20;
+    ctx.strokeStyle = 'rgba(170,170,187,0.7)'; ctx.lineWidth = 3;
+    roundRect(pr.x + 6, pr.y, pr.w - 12, pr.h, 14); ctx.stroke();
+    ctx.restore();
+  }
   ctx.save();
   ctx.fillStyle = 'rgba(80,80,100,0.2)';
   ctx.strokeStyle = 'rgba(170,170,187,0.35)';
@@ -698,214 +820,211 @@ function drawBins() {
 // Helper: compute wall screen position from depth
 // depth 0 = far away (small), depth 2.0 = right in your face (large)
 function wallScreenY(w) {
-  const depthFactor = Math.max(0.05, Math.min(2.0, w.depth)); // clamp 0–2
-  const scale = Math.max(0.1, depthFactor * 0.45) + 0.1; // 0.1x (far) to ~1.0x (near)
-  const baseY = H * 0.38;
-  const scaledH = w.h * scale;
-  return { y: baseY - scaledH / 2, scale, scaledH };
+    const depthFactor = Math.max(0.05, Math.min(2.0, w.depth));
+    const scale = Math.max(0.12, depthFactor * 0.44) + 0.08;
+    const baseY = H * 0.40;
+    const scaledH = w.h * scale;
+    return { y: baseY - scaledH / 2, scale, scaledH };
 }
 
 function drawWallBody(w, offsetY) {
-  offsetY = offsetY || 0;
-  const { y: baseY, scale, scaledH } = wallScreenY(w);
-  const y = baseY + offsetY;
-  const shape = w.shape;
-  const cutCX = w.cx;
-  const cutCY = y + scaledH / 2;
-  const cutW = w.cutW * scale;
-  const theme = getTheme(G.level - 1);
+    offsetY = offsetY || 0;
+    const { y: baseY, scale, scaledH } = wallScreenY(w);
+    const y = baseY + offsetY;
+    const shape = w.shape;
+    const cutCX = w.cx;
+    const cutCY = y + scaledH / 2;
+    const cutW = w.cutW * scale;
+    const cutH = w.cutH * scale;
+    const theme = getTheme(G.level - 1);
 
-  // Target panel dimensions (shooting range style — square-ish board)
-  const panelPadX = cutW * 0.55;
-  const panelX = cutCX - cutW / 2 - panelPadX;
-  const panelW = cutW + panelPadX * 2;
-  const panelY = y;
-  const panelH = scaledH;
+    const panelPadX = cutW * 0.55;
+    const panelX = cutCX - cutW / 2 - panelPadX;
+    const panelW = cutW + panelPadX * 2;
+    const panelY = y;
+    const panelH = scaledH;
 
-  // ── Panel with image-based cutout using offscreen compositing ──
-  const img = shape === 'shark' ? SHARK_IMG : PLANE_IMG;
-  const imgLoaded = shape === 'shark' ? sharkSilLoaded : planeSilLoaded;
+    const img = shape === 'shark' ? SHARK_PHOTO_IMG : PLANE_PHOTO_IMG;
+    const imgLoaded = shape === 'shark' ? sharkPhotoLoaded : planePhotoLoaded;
 
-  if (imgLoaded) {
-    // Calculate cutout image dimensions (same aspect ratio as photo sprite)
-    const imgW = cutW;
-    const imgH = cutW * (img.naturalHeight / img.naturalWidth);
+    if (imgLoaded) {
+        const imgW = cutW;
+        const imgH = cutW * (img.naturalHeight / img.naturalWidth);
 
-    // Draw panel onto offscreen canvas at (0,0), then punch hole, then blit to main canvas
-    ensureOSC(panelW, panelH);
-    wallOCtx.clearRect(0, 0, wallOSC.width, wallOSC.height);
-    wallOCtx.save();
+        ensureOSC(panelW, panelH);
+        wallOCtx.clearRect(0, 0, wallOSC.width, wallOSC.height);
+        wallOCtx.save();
 
-    // Draw the panel body (all coords offset so 0,0 = panelX,panelY)
-    const grad = wallOCtx.createLinearGradient(0, 0, 0, panelH);
-    grad.addColorStop(0, theme.wallColor1);
-    grad.addColorStop(0.25, theme.wallColor2);
-    grad.addColorStop(0.5, theme.wallColor3);
-    grad.addColorStop(0.75, theme.wallColor2);
-    grad.addColorStop(1, theme.wallColor1);
-    wallOCtx.fillStyle = grad;
-    wallOCtx.fillRect(0, 0, panelW, panelH);
+        // ── Brick wall texture (fixed grid, scales with wall) ──
+        const ROWS = 22;
+        const COLS = 14;
+        const cellH = panelH / ROWS;
+        const cellW = panelW / COLS;
+        const mortarGap = Math.max(1, Math.round(cellH * 0.1));
+        const brickH = cellH - mortarGap;
+        const brickW = cellW - mortarGap;
+        const c1 = theme.wallColor1, c2 = theme.wallColor2, c3 = theme.wallColor3;
 
-    // Rivet lines
-    wallOCtx.strokeStyle = 'rgba(100,100,130,0.25)';
-    wallOCtx.lineWidth = 1;
-    for (let rx = 0; rx < panelW; rx += 40) {
-      wallOCtx.beginPath(); wallOCtx.moveTo(rx, 0); wallOCtx.lineTo(rx, panelH); wallOCtx.stroke();
-    }
-    wallOCtx.strokeStyle = 'rgba(100,100,130,0.12)';
-    wallOCtx.beginPath();
-    wallOCtx.moveTo(0, panelH * 0.3); wallOCtx.lineTo(panelW, panelH * 0.3);
-    wallOCtx.moveTo(0, panelH * 0.7); wallOCtx.lineTo(panelW, panelH * 0.7);
-    wallOCtx.stroke();
+        function brickColor(row, col) {
+          const v = ((row * 7 + col * 13) % 5);
+          if (v === 0) return c1;
+          if (v === 1) return c2;
+          if (v === 2) return c3;
+          if (v === 3) return c2;
+          return c1;
+        }
 
-    // Punch the cutout hole using destination-out compositing
-    // Image centered at (panelW/2, panelH/2) relative to panel top-left
-    wallOCtx.globalCompositeOperation = 'destination-out';
-    wallOCtx.drawImage(img, panelW / 2 - imgW / 2, panelH / 2 - imgH / 2, imgW, imgH);
-    wallOCtx.globalCompositeOperation = 'source-over';
-    wallOCtx.restore();
+        for (let row = 0; row < ROWS; row++) {
+          const offset = (row % 2) * (cellW * 0.5);
+          for (let col = -1; col <= COLS; col++) {
+            const bx = col * cellW + offset;
+            wallOCtx.fillStyle = brickColor(row, col);
+            wallOCtx.fillRect(bx + mortarGap * 0.5, row * cellH + mortarGap * 0.5, brickW, brickH);
+          }
+        }
 
-    // Blit offscreen canvas onto main canvas at panel position
-    ctx.drawImage(wallOSC, 0, 0, panelW, panelH, panelX, panelY, panelW, panelH);
-  } else {
-    // Fallback: old evenodd path clip (if images haven't loaded yet)
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(panelX, panelY, panelW, panelH);
-    ctx.save();
-    ctx.translate(cutCX, cutCY);
-    const sc = -cutW / 100;
-    ctx.scale(sc, sc);
-    ctx.beginPath();
-    if (shape === 'shark') {
-      ctx.moveTo(-46, -8); ctx.lineTo(-38, -20); ctx.lineTo(-18, -12); ctx.lineTo(-10, -8);
-      ctx.lineTo(-4, -30); ctx.lineTo(2, -8); ctx.lineTo(20, -6); ctx.lineTo(44, 0);
-      ctx.lineTo(20, 6); ctx.lineTo(14, 8); ctx.lineTo(8, 22); ctx.lineTo(4, 8);
-      ctx.lineTo(-18, 10); ctx.lineTo(-38, 20); ctx.lineTo(-46, 8); ctx.closePath();
+        // Mortar overlay
+        wallOCtx.fillStyle = 'rgba(180,170,150,0.15)';
+        for (let row = 0; row < ROWS; row++) {
+          wallOCtx.fillRect(0, row * cellH, panelW, mortarGap);
+          const offset = (row % 2) * (cellW * 0.5);
+          for (let col = 0; col <= COLS; col++) {
+            wallOCtx.fillRect(col * cellW + offset, row * cellH, mortarGap, cellH);
+          }
+        }
+
+        // Punch the cutout hole
+        wallOCtx.globalCompositeOperation = 'destination-out';
+        wallOCtx.drawImage(img, panelW / 2 - imgW / 2, panelH / 2 - imgH / 2, imgW, imgH);
+        wallOCtx.globalCompositeOperation = 'source-over';
+        wallOCtx.restore();
+
+        // Depth-based shadow overlay (far walls darker)
+        const depthPercent = w.depth / 2.0; // 0→1
+        if (depthPercent < 0.6) {
+          wallOCtx.save();
+          const darkness = (1 - depthPercent / 0.6) * 0.5;
+          wallOCtx.fillStyle = `rgba(0,0,0,${darkness})`;
+          wallOCtx.fillRect(0, 0, panelW, panelH);
+          wallOCtx.restore();
+        }
+
+        ctx.drawImage(wallOSC, 0, 0, panelW, panelH, panelX, panelY, panelW, panelH);
     } else {
-      ctx.moveTo(44, 0); ctx.lineTo(20, -3); ctx.lineTo(12, -7); ctx.lineTo(4, -5);
-      ctx.lineTo(-14, -34); ctx.lineTo(-10, -6); ctx.lineTo(-28, -5); ctx.lineTo(-36, -22);
-      ctx.lineTo(-38, -5); ctx.lineTo(-44, -2); ctx.lineTo(-44, 2); ctx.lineTo(-38, 5);
-      ctx.lineTo(-28, 5); ctx.lineTo(-10, 6); ctx.lineTo(-14, 34); ctx.lineTo(4, 5);
-      ctx.lineTo(12, 7); ctx.lineTo(20, 3); ctx.closePath();
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(panelX, panelY, panelW, panelH);
+        ctx.save();
+        ctx.translate(cutCX, cutCY);
+        const sc = -cutW / 100;
+        ctx.scale(sc, sc);
+        ctx.beginPath();
+        if (shape === 'shark') {
+            ctx.moveTo(-46, -8); ctx.lineTo(-38, -20); ctx.lineTo(-18, -12); ctx.lineTo(-10, -8);
+            ctx.lineTo(-4, -30); ctx.lineTo(2, -8); ctx.lineTo(20, -6); ctx.lineTo(44, 0);
+            ctx.lineTo(20, 6); ctx.lineTo(14, 8); ctx.lineTo(8, 22); ctx.lineTo(4, 8);
+            ctx.lineTo(-18, 10); ctx.lineTo(-38, 20); ctx.lineTo(-46, 8); ctx.closePath();
+        } else {
+            ctx.moveTo(44, 0); ctx.lineTo(20, -3); ctx.lineTo(12, -7); ctx.lineTo(4, -5);
+            ctx.lineTo(-14, -34); ctx.lineTo(-10, -6); ctx.lineTo(-28, -5); ctx.lineTo(-36, -22);
+            ctx.lineTo(-38, -5); ctx.lineTo(-44, -2); ctx.lineTo(-44, 2); ctx.lineTo(-38, 5);
+            ctx.lineTo(-28, 5); ctx.lineTo(-10, 6); ctx.lineTo(-14, 34); ctx.lineTo(4, 5);
+            ctx.lineTo(12, 7); ctx.lineTo(20, 3); ctx.closePath();
+        }
+        ctx.restore();
+        ctx.clip('evenodd');
+      // Fallback brick pattern (fixed grid)
+      const ROWS = 22;
+      const COLS = 14;
+      const cellH = panelH / ROWS;
+      const cellW = panelW / COLS;
+      const mortarGap = Math.max(1, Math.round(cellH * 0.1));
+      const fbH = cellH - mortarGap;
+      const fbW = cellW - mortarGap;
+      let row = 0;
+      for (let r = 0; r < ROWS; r++) {
+        const offset = (r % 2) * (cellW * 0.5);
+        for (let col = -1; col <= COLS; col++) {
+          const bx = panelX + col * cellW + offset + mortarGap * 0.5;
+          const by = panelY + r * cellH + mortarGap * 0.5;
+          const v = ((r * 7 + col * 13) % 5);
+          ctx.fillStyle = v < 2 ? theme.wallColor1 : v < 4 ? theme.wallColor2 : theme.wallColor3;
+          ctx.fillRect(bx, by, fbW, fbH);
+        }
+      }
+        ctx.restore();
     }
-    ctx.restore();
-    ctx.clip('evenodd');
-    const grad = ctx.createLinearGradient(panelX, y, panelX, y + scaledH);
-    grad.addColorStop(0, theme.wallColor1);
-    grad.addColorStop(0.25, theme.wallColor2);
-    grad.addColorStop(0.5, theme.wallColor3);
-    grad.addColorStop(0.75, theme.wallColor2);
-    grad.addColorStop(1, theme.wallColor1);
-    ctx.fillStyle = grad;
-    ctx.fillRect(panelX, y, panelW, scaledH);
-    ctx.strokeStyle = 'rgba(100,100,130,0.25)';
-    ctx.lineWidth = 1;
-    for (let rx = panelX; rx < panelX + panelW; rx += 40) {
-      ctx.beginPath(); ctx.moveTo(rx, y); ctx.lineTo(rx, y + scaledH); ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(100,100,130,0.12)';
-    ctx.beginPath();
-    ctx.moveTo(panelX, y + scaledH * 0.3); ctx.lineTo(panelX + panelW, y + scaledH * 0.3);
-    ctx.moveTo(panelX, y + scaledH * 0.7); ctx.lineTo(panelX + panelW, y + scaledH * 0.7);
-    ctx.stroke();
-    ctx.restore();
-  }
 
-  // Target panel border (shooting range style frame)
-  ctx.save();
-  ctx.strokeStyle = 'rgba(200,200,220,0.5)';
-  ctx.lineWidth = Math.max(2, 3 * scale);
-  ctx.strokeRect(panelX, panelY, panelW, panelH);
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-  ctx.lineWidth = Math.max(1, 1.5 * scale);
-  ctx.strokeRect(panelX + 2, panelY + 2, panelW - 4, panelH - 4);
-  const boltR = Math.max(2, 4 * scale);
-  const boltOff = Math.max(6, 10 * scale);
-  ctx.fillStyle = 'rgba(180,180,200,0.6)';
-  [[panelX + boltOff, panelY + boltOff], [panelX + panelW - boltOff, panelY + boltOff],
-   [panelX + boltOff, panelY + panelH - boltOff], [panelX + panelW - boltOff, panelY + panelH - boltOff]
-  ].forEach(([bx, by]) => { ctx.beginPath(); ctx.arc(bx, by, boltR, 0, Math.PI * 2); ctx.fill(); });
-  ctx.restore();
-
-  // Ghost silhouette in the hole — bright guide showing what shape fits
-  ctx.save();
-  ctx.globalAlpha = 0.45;
-  if (w.type === 'shame') drawShame(cutCX, cutCY, cutW, 0.45);
-  else if (w.type === 'plark') drawPlark(cutCX, cutCY, cutW, 0.45);
-  else drawShape(shape, cutCX, cutCY, cutW, 0.45, theme.accent);
-  ctx.restore();
-
-  // Glowing cutout border — draw the image silhouette with glow shadow on offscreen canvas
-  if (imgLoaded) {
-    const imgW = cutW;
-    const imgH = cutW * (img.naturalHeight / img.naturalWidth);
-    // Use offscreen canvas for compositing safety
-    ensureOSC(imgW + 32, imgH + 32);
-    wallOCtx.clearRect(0, 0, wallOSC.width, wallOSC.height);
-    wallOCtx.save();
-    wallOCtx.globalAlpha = 0.55;
-    wallOCtx.shadowColor = theme.accent;
-    wallOCtx.shadowBlur = 12;
-    // Draw image with shadow → shadow creates the glow outline
-    wallOCtx.drawImage(img, (wallOSC.width - imgW) / 2, (wallOSC.height - imgH) / 2, imgW, imgH);
-    // Erase the interior image, leaving only the glow shadow halo
-    wallOCtx.globalCompositeOperation = 'destination-out';
-    wallOCtx.shadowColor = 'transparent';
-    wallOCtx.shadowBlur = 0;
-    wallOCtx.drawImage(img, (wallOSC.width - imgW) / 2, (wallOSC.height - imgH) / 2, imgW, imgH);
-    wallOCtx.restore();
-    // Blit glow onto main canvas centered on cutout
-    ctx.drawImage(wallOSC,
-      0, 0, wallOSC.width, wallOSC.height,
-      cutCX - wallOSC.width / 2, cutCY - wallOSC.height / 2,
-      wallOSC.width, wallOSC.height
-    );
-  } else {
-    // Fallback: old path-based glow border
+    // Wall border
     ctx.save();
-    ctx.globalAlpha = 0.55;
-    ctx.strokeStyle = theme.accent;
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = theme.accent;
-    ctx.shadowBlur = 12;
-    ctx.translate(cutCX, cutCY);
-    const bs = cutW / 100;
-    ctx.scale(bs, bs);
-    ctx.beginPath();
-    if (shape === 'shark') {
-      ctx.moveTo(-46, -8); ctx.lineTo(-38, -20); ctx.lineTo(-18, -12); ctx.lineTo(-10, -8);
-      ctx.lineTo(-4, -30); ctx.lineTo(2, -8); ctx.lineTo(20, -6); ctx.lineTo(44, 0);
-      ctx.lineTo(20, 6); ctx.lineTo(14, 8); ctx.lineTo(8, 22); ctx.lineTo(4, 8);
-      ctx.lineTo(-18, 10); ctx.lineTo(-38, 20); ctx.lineTo(-46, 8); ctx.closePath();
+    ctx.strokeStyle = 'rgba(140,130,110,0.5)';
+    ctx.lineWidth = Math.max(2, 3 * scale);
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
+    ctx.restore();
+
+    // Glowing cutout border
+    if (imgLoaded) {
+        const imgW = cutW;
+        const imgH = cutW * (img.naturalHeight / img.naturalWidth);
+        ensureOSC(imgW + 32, imgH + 32);
+        wallOCtx.clearRect(0, 0, wallOSC.width, wallOSC.height);
+        wallOCtx.save();
+        wallOCtx.globalAlpha = 0.55;
+        wallOCtx.shadowColor = theme.accent;
+        wallOCtx.shadowBlur = 12;
+        wallOCtx.drawImage(img, (wallOSC.width - imgW) / 2, (wallOSC.height - imgH) / 2, imgW, imgH);
+        wallOCtx.globalCompositeOperation = 'destination-out';
+        wallOCtx.shadowColor = 'transparent';
+        wallOCtx.shadowBlur = 0;
+        wallOCtx.drawImage(img, (wallOSC.width - imgW) / 2, (wallOSC.height - imgH) / 2, imgW, imgH);
+        wallOCtx.restore();
+        ctx.drawImage(wallOSC,
+            0, 0, wallOSC.width, wallOSC.height,
+            cutCX - wallOSC.width / 2, cutCY - wallOSC.height / 2,
+            wallOSC.width, wallOSC.height
+        );
     } else {
-      ctx.moveTo(44, 0); ctx.lineTo(20, -3); ctx.lineTo(12, -7); ctx.lineTo(4, -5);
-      ctx.lineTo(-14, -34); ctx.lineTo(-10, -6); ctx.lineTo(-28, -5); ctx.lineTo(-36, -22);
-      ctx.lineTo(-38, -5); ctx.lineTo(-44, -2); ctx.lineTo(-44, 2); ctx.lineTo(-38, 5);
-      ctx.lineTo(-28, 5); ctx.lineTo(-10, 6); ctx.lineTo(-14, 34); ctx.lineTo(4, 5);
-      ctx.lineTo(12, 7); ctx.lineTo(20, 3); ctx.closePath();
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = theme.accent;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = theme.accent;
+        ctx.shadowBlur = 12;
+        ctx.translate(cutCX, cutCY);
+        const bs = cutW / 100;
+        ctx.scale(bs, bs);
+        ctx.beginPath();
+        if (shape === 'shark') {
+            ctx.moveTo(-46, -8); ctx.lineTo(-38, -20); ctx.lineTo(-18, -12); ctx.lineTo(-10, -8);
+            ctx.lineTo(-4, -30); ctx.lineTo(2, -8); ctx.lineTo(20, -6); ctx.lineTo(44, 0);
+            ctx.lineTo(20, 6); ctx.lineTo(14, 8); ctx.lineTo(8, 22); ctx.lineTo(4, 8);
+            ctx.lineTo(-18, 10); ctx.lineTo(-38, 20); ctx.lineTo(-46, 8); ctx.closePath();
+        } else {
+            ctx.moveTo(44, 0); ctx.lineTo(20, -3); ctx.lineTo(12, -7); ctx.lineTo(4, -5);
+            ctx.lineTo(-14, -34); ctx.lineTo(-10, -6); ctx.lineTo(-28, -5); ctx.lineTo(-36, -22);
+            ctx.lineTo(-38, -5); ctx.lineTo(-44, -2); ctx.lineTo(-44, 2); ctx.lineTo(-38, 5);
+            ctx.lineTo(-28, 5); ctx.lineTo(-10, 6); ctx.lineTo(-14, 34); ctx.lineTo(4, 5);
+            ctx.lineTo(12, 7); ctx.lineTo(20, 3); ctx.closePath();
+        }
+        ctx.stroke();
+        ctx.restore();
     }
-    ctx.stroke();
-    ctx.restore();
-  }
 
-  // Combo-type hint labels
-  if (w.type === 'shame' || w.type === 'plark') {
-    const req = requiredThrow(w.type);
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    // Top label: combo name
-    ctx.fillStyle = '#f0f';
-    ctx.font = `bold ${Math.max(12, W * 0.032)}px "Courier New",monospace`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText(w.type.toUpperCase() + '!', cutCX, y - 2);
-    // Bottom label: what to throw
-    ctx.fillStyle = req === 'shark' ? '#1a8ccc' : '#aab';
-    ctx.font = `bold ${Math.max(10, W * 0.026)}px "Courier New",monospace`;
-    ctx.textBaseline = 'top';
-    ctx.fillText('THROW ' + req.toUpperCase(), cutCX, y + scaledH + 4);
-    ctx.restore();
-  }
+    // Combo-type hint labels
+    if (w.type === 'shame' || w.type === 'plark') {
+        const req = requiredThrow(w.type);
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#f0f';
+        ctx.font = `bold ${Math.max(12, W * 0.032)}px "Courier New",monospace`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(w.type.toUpperCase() + '!', cutCX, y - 2);
+        ctx.fillStyle = req === 'shark' ? '#1a8ccc' : '#aab';
+        ctx.font = `bold ${Math.max(10, W * 0.026)}px "Courier New",monospace`;
+        ctx.textBaseline = 'top';
+        ctx.fillText('THROW ' + req.toUpperCase(), cutCX, y + scaledH + 4);
+        ctx.restore();
+    }
 }
 
 // ─── Particle effects ───────────────────────────────────────────
@@ -950,10 +1069,13 @@ function checkCollision(proj, wall) {
   const dy = proj.y - cutCY;
   const dist = Math.sqrt(dx * dx + dy * dy);
   // Generous hit radius — the cutout is forgiving
-  const hitR = scaledCutW * 0.48;
-  // Check projectile is near the wall's vertical band (generous vertical window)
+  const scaledCutH = wall.cutH * scale;
+  const hitRW = scaledCutW * 0.42;
+  const hitRH = scaledCutH * 0.42;
   const nearWall = proj.y >= wallY - 20 && proj.y <= wallY + scaledH + 20;
-  return dist < hitR && nearWall;
+  const ex = (dx / hitRW) * (dx / hitRW);
+  const ey = (dy / hitRH) * (dy / hitRH);
+  return (ex + ey) < 1 && nearWall;
 }
 
 function handleHit(proj, wall) {
@@ -1027,6 +1149,11 @@ canvas.addEventListener('pointerdown', e => {
   }
 });
 canvas.addEventListener('pointermove', e => {
+  // Update bin hover
+  const sr = binRect('shark'), pr = binRect('plane');
+  if (e.clientX >= sr.x && e.clientX <= sr.x + sr.w && e.clientY >= sr.y - 20 && e.clientY <= sr.y + sr.h) G.binHover = 'shark';
+  else if (e.clientX >= pr.x && e.clientX <= pr.x + pr.w && e.clientY >= pr.y - 20 && e.clientY <= pr.y + pr.h) G.binHover = 'plane';
+  else G.binHover = null;
   if (!G.ptrDown || e.pointerId !== G.ptrId) return;
   G.dragCurX = e.clientX; G.dragCurY = e.clientY;
 });
@@ -1417,6 +1544,23 @@ function drawComboHype() {
 function drawFx(dt) {
   G.fx.forEach(e => {
     e.age += dt;
+    // Sparkle particles (direct properties, no ps array)
+    if (e.type === 'sparkle') {
+      e.x += (e.vx || 0) * dt;
+      e.y += (e.vy || 0) * dt;
+      e.life -= dt;
+      if (e.life > 0) {
+        ctx.save();
+        ctx.globalAlpha = (e.life / e.max) * 0.8;
+        ctx.fillStyle = e.color || '#fff';
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, (e.sz || 2) * (e.life / e.max), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      return;
+    }
+    // Boom particles (ps array)
     e.flash = Math.max(0, e.flash - dt * 4);
     if (e.flash > 0) {
       ctx.save(); ctx.globalAlpha = e.flash * 0.35;
@@ -1425,17 +1569,22 @@ function drawFx(dt) {
       ctx.beginPath(); ctx.arc(e.x, e.y, 50, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
-    e.ps.forEach(p => {
-      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 280 * dt; p.life -= dt;
-      if (p.life > 0) {
-        ctx.save(); ctx.globalAlpha = (p.life / p.max) * 0.8;
-        ctx.fillStyle = p.col;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.sz * (p.life / p.max), 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-      }
-    });
+    if (e.ps) {
+      e.ps.forEach(p => {
+        p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 280 * dt; p.life -= dt;
+        if (p.life > 0) {
+          ctx.save(); ctx.globalAlpha = (p.life / p.max) * 0.8;
+          ctx.fillStyle = p.col;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.sz * (p.life / p.max), 0, Math.PI*2); ctx.fill();
+          ctx.restore();
+        }
+      });
+    }
   });
-  G.fx = G.fx.filter(e => e.age < 1.8);
+  G.fx = G.fx.filter(e => e.type === 'sparkle' ? e.life > 0 : e.age < 1.8);
+  // Safety cap — prevent runaway accumulation
+  if (G.fx.length > 200) G.fx.splice(0, G.fx.length - 200);
+  if (G.walls.length > 15) G.walls = G.walls.filter(w => w.state === 'advancing');
 }
 
 // ─── Floating text ──────────────────────────────────────────────
@@ -1646,6 +1795,22 @@ function loop(ts) {
   if (!G.running) return;
   const dt = Math.min((ts - lt) / 1000, 0.05);
   lt = ts;
+
+  // ─── Countdown ───
+  if (G.countdown > 0) {
+    G.countdown -= dt;
+    const show = Math.ceil(G.countdown);
+    if (show !== G._lastCount) {
+      G._lastCount = show;
+      if (show > 0) {
+        addText(W / 2, H * 0.4, show === 3 ? 'READY' : String(show), show === 1 ? '#f44' : '#fff', true);
+        sfxFling();
+      } else {
+        addText(W / 2, H * 0.4, 'GO!', '#0f0', true);
+        playTone(660, 0.2, 'square', 0.12);
+      }
+    }
+  } else {
  G.gameTime += dt;
  updateEnvParticles(dt);
 
@@ -1654,11 +1819,17 @@ function loop(ts) {
 
   // Level flash timer
   if (G.levelFlash > 0) G.levelFlash -= dt * 2;
-  if (G.level > prevLevel) {
-    G.levelFlash = 1;
-    sfxLevelUp();
-    addText(W / 2, H * 0.35, 'LEVEL ' + G.level + '!', getTheme(G.level - 1).accent, true);
-  }
+    if (G.level > prevLevel) {
+        G.levelFlash = 1;
+        G.themeFade = 1.0;
+        G._prevThemeBg = getTheme(prevLevel - 1).bg1;
+        sfxLevelUp();
+        addText(W / 2, H * 0.35, 'LEVEL ' + G.level + '!', getTheme(G.level - 1).accent, true);
+        showLevelPlaque(G.level);
+    }
+
+    // Score milestones
+    checkMilestone();
 
   // Screen shake
   if (G.shakeTime > 0) {
@@ -1672,9 +1843,9 @@ function loop(ts) {
   // Wall spawning — allow multiple walls on screen as difficulty increases
   G.wallTimer -= dt;
   const maxAdvancing = G.level < 3 ? 1 : G.level < 6 ? 2 : 3;
-  if (G.wallTimer <= 0 && G.walls.filter(w => w.state === 'advancing').length < maxAdvancing) {
+  if (G.wallTimer <= 0 && G.walls.filter(w => w.state === 'advancing').length < maxAdvancing && G.walls.length < 10) {
     spawnWall();
-    G.wallTimer = WALL_GAP;
+    G.wallTimer = Math.max(0.55, WALL_GAP - (G.level - 1) * 0.03);
   }
 
   // Regenerate life pips
@@ -1722,6 +1893,7 @@ for (let i = 0; i < G.lifePips.length; i++) {
 
   G.projs = G.projs.filter(p => p.alive);
   G.walls = G.walls.filter(w => w.state !== 'dead');
+  } // end non-countdown game logic
 
   // ─── DRAW ───
   ctx.save();
@@ -1742,12 +1914,40 @@ for (let i = 0; i < G.lifePips.length; i++) {
   drawFlingLines(dt);
   drawFx(dt);
   drawTexts(dt);
+  // Hybrid wall hint — pulse the correct bin when a shame/plark wall is approaching
+  if (G.level >= 3) {
+    const hybrid = G.walls.find(w => w.state === 'advancing' && (w.type === 'shame' || w.type === 'plark'));
+    if (hybrid) {
+      const hintType = requiredThrow(hybrid.type);
+      const hintGlow = 0.3 + 0.3 * Math.sin(G.gameTime * 4);
+      ctx.save();
+      ctx.shadowColor = hintType === 'shark' ? '#0af' : '#fa0';
+      ctx.shadowBlur = 16 + hintGlow * 12;
+      ctx.strokeStyle = hintType === 'shark' ? `rgba(26,140,204,${0.2 + hintGlow})` : `rgba(200,170,100,${0.2 + hintGlow})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 6]);
+      const br = binRect(hintType);
+      roundRect(br.x + 4, br.y - 4, br.w - 8, br.h + 8, 16);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
   drawBins();
   drawDrag();
   drawLifePips();
   drawComboHype();
 
 	ctx.restore(); // undo shake
+
+  // Theme transition overlay
+  if (G.themeFade > 0) {
+    G.themeFade -= dt * 1.2;
+    ctx.save();
+    ctx.globalAlpha = G.themeFade * 0.6;
+    ctx.fillStyle = G._prevThemeBg || '#040c1a';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
 
 	drawDangerOverlay();
 
@@ -1768,37 +1968,60 @@ G.lives = G.lifePips.filter(p => p > 0.01).length;
     if (isNew) setHighScore(G.score);
     $('goTitle').style.display = 'block';
     $('goScore').style.display = 'block';
-    let goText = 'Score: ' + G.score + '  |  Level: ' + G.level + '  |  Best combo: ' + G.bestCombo;
-    goText += '\nHigh score: ' + (isNew ? G.score : hi) + (isNew ? '  NEW!' : '');
-    $('goScore').textContent = goText;
+        let goText = 'Score: ' + G.score + ' | Level: ' + G.level + ' | Best combo: ' + G.bestCombo;
+        goText += '\nHigh score: ' + (isNew ? G.score : hi) + (isNew ? ' NEW!' : '');
+        goText += '\n' + getTaunt(G.score);
+        $('goScore').textContent = goText;
     $('restartBtn').style.display = 'inline-block';
     $('hud').style.display = 'none';
     return;
   }
 
-  requestAnimationFrame(loop);
-}
+        // Cursor sparkle trail
+        if (G.ptrDown && G.dragType) {
+            for (let i = 0; i < 2; i++) {
+                G.fx.push({
+                    x: G.dragCurX + (Math.random() - 0.5) * 14,
+                    y: G.dragCurY + (Math.random() - 0.5) * 14,
+                    vx: (Math.random() - 0.5) * 40,
+                    vy: (Math.random() - 0.5) * 40 - 20,
+                    life: 0.4 + Math.random() * 0.3,
+                    max: 0.7,
+                    sz: 1.5 + Math.random() * 2.5,
+                    color: G.dragType === 'shark' ? '#0af' : '#fa0',
+                    type: 'sparkle'
+                });
+            }
+        }
 
-// ─── Start / restart ────────────────────────────────────────────
-function startGame() {
-  $('overlay').classList.add('hidden');
-  $('goTitle').style.display = 'none';
-  $('goScore').style.display = 'none';
-  $('restartBtn').style.display = 'none';
-  $('hud').style.display = 'flex';
-  G.score = 0; G.lives = MAX_LIVES; G.level = 1; G.combo = 0; G.bestCombo = 0;
-    G.lifePips = new Array(MAX_LIVES).fill(1.0);
-  G.walls = []; G.projs = []; G.fx = []; G.texts = []; G.flingLines = [];
- ENV_PARTICLES.length = 0;
-  G.wallTimer = 0.6; G.levelFlash = 0;
-  G.shakeX = 0; G.shakeY = 0; G.shakeTime = 0;
-	G.gameTime = 0;
-	if (G.jawsInterval) { clearInterval(G.jawsInterval); G.jawsInterval = null; }
-	G.jawsTempo = 2000;
-	G.running = true;
-  lt = performance.now();
-  requestAnimationFrame(loop);
-}
+        requestAnimationFrame(loop);
+    }
+
+    // ─── Start / restart ────────────────────────────────────────────
+    function startGame() {
+        $('overlay').classList.add('hidden');
+        $('goTitle').style.display = 'none';
+        $('goScore').style.display = 'none';
+        $('restartBtn').style.display = 'none';
+        $('hud').style.display = 'flex';
+        G.score = 0; G.lives = MAX_LIVES; G.level = 1; G.combo = 0; G.bestCombo = 0;
+        G.lifePips = new Array(MAX_LIVES).fill(1.0);
+        G.walls = []; G.projs = []; G.fx = []; G.texts = []; G.flingLines = [];
+        ENV_PARTICLES.length = 0;
+        G.wallTimer = 0.6; G.levelFlash = 0;
+        G.shakeX = 0; G.shakeY = 0; G.shakeTime = 0;
+        G.gameTime = 0;
+        G.lastMilestone = 0;
+        if (G.jawsInterval) { clearInterval(G.jawsInterval); G.jawsInterval = null; }
+        G.jawsTempo = 2000;
+        G.running = true;
+        G.countdown = 3.0;
+        G._lastCount = -1;
+        lt = performance.now();
+        requestAnimationFrame(loop);
+        showTutorial();
+        showLevelPlaque(1);
+    }
 
 $('startBtn').addEventListener('click', startGame);
 $('restartBtn').addEventListener('click', startGame);
