@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "node test/game.test.js"
+    "test": "node test/game.test.js",
+    "dev": "bunx serve . -p 3000 --cors"
   }
 }
